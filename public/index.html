@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ФОРМА — питание и тренировки</title>
+<link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+<!-- ============ AUTH ============ -->
+<div class="auth" id="auth">
+  <div class="authart">
+    <img src="/static/img/hero.jpeg" alt="" />
+    <div class="authtext">
+      <h1>Питание и тренировки<br />в одном месте</h1>
+      <p>Норма КБЖУ, простые рецепты для тех, кто не умеет готовить, дневник веса и база упражнений с фото техники.</p>
+      <div class="authlist">
+        <span>16 рецептов</span>
+        <span>12 упражнений</span>
+        <span>График веса</span>
+        <span>Счётчик КБЖУ</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="authside">
+    <div class="authcard">
+      <div class="brand"><span class="dot"></span> ФОРМА</div>
+
+      <!-- step 1: login / register -->
+      <div id="authStep1">
+        <h2 id="authTitle">С возвращением</h2>
+        <p class="sub" id="authSub">Войди в аккаунт, чтобы увидеть свою норму, вес и историю.</p>
+
+        <div class="switch">
+          <button type="button" id="swLogin" class="on">Войти</button>
+          <button type="button" id="swReg">Создать аккаунт</button>
+        </div>
+
+        <div class="form">
+          <div class="field" id="fName" style="display:none">
+            <label for="aName">Как тебя зовут</label>
+            <input id="aName" type="text" placeholder="Максим" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="aMail">Почта или логин</label>
+            <input id="aMail" type="text" placeholder="maxim@mail.ru" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label for="aPass">Пароль</label>
+            <input id="aPass" type="password" placeholder="минимум 4 символа" autocomplete="current-password" />
+          </div>
+          <div class="err" id="authErr"></div>
+          <button class="btn wide" type="button" id="authGo">Войти</button>
+        </div>
+        <p class="foot">Аккаунт хранится только в этом браузере — никакие данные никуда не отправляются.</p>
+      </div>
+
+      <!-- step 2: onboarding -->
+      <div id="authStep2" style="display:none">
+        <h2>Параметры для расчёта</h2>
+        <p class="sub">Пять полей — и сайт сразу посчитает твою норму КБЖУ.</p>
+        <div class="form">
+          <div class="field">
+            <label>Пол</label>
+            <div class="seg" id="oSex">
+              <button type="button" data-v="m" class="on">Мужской</button>
+              <button type="button" data-v="f">Женский</button>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="oAge">Возраст</label><input id="oAge" type="number" value="20" min="14" max="90" /></div>
+            <div class="field"><label for="oHeight">Рост, см</label><input id="oHeight" type="number" value="180" min="130" max="230" /></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="oWeight">Вес, кг</label><input id="oWeight" type="number" value="75" min="35" max="250" step="0.1" /></div>
+            <div class="field">
+              <label for="oAct">Активность</label>
+              <select id="oAct">
+                <option value="1.2">Сидячая</option>
+                <option value="1.375">1–2 тренировки</option>
+                <option value="1.55" selected>3–4 тренировки</option>
+                <option value="1.725">5–6 тренировок</option>
+                <option value="1.9">Физическая работа</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Цель</label>
+            <div class="seg" id="oGoal">
+              <button type="button" data-v="cut">Сушка</button>
+              <button type="button" data-v="keep" class="on">Форма</button>
+              <button type="button" data-v="mass">Масса</button>
+            </div>
+          </div>
+          <button class="btn wide" type="button" id="onbGo">Начать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div class="shell" id="app" style="display:none">
+  <aside class="side">
+    <div class="brand"><span class="dot"></span> ФОРМА</div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidefoot">
+      <div class="me">
+        <div class="ava" id="ava">M</div>
+        <div><b id="meName">Максим</b><span id="meMail">maxim@mail.ru</span></div>
+      </div>
+      <button class="logout" type="button" id="logout">Выйти из аккаунта</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="mtop">
+      <div class="brand"><span class="dot"></span> ФОРМА</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:13px;color:var(--muted)" id="meNameM">Максим</span>
+        <button class="btn sm ghost" type="button" id="logoutM">Выйти</button>
+      </div>
+    </div>
+
+    <!-- ---- TAB: НОРМА ---- -->
+    <section class="tab on" id="tab-norm">
+      <div class="phead">
+        <h1>Норма КБЖУ</h1>
+        <p>Формула Миффлина–Сан Жеора. Меняй параметры — цифры пересчитываются сразу.</p>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <div class="form" style="margin-top:0">
+            <div class="field">
+              <label>Пол</label>
+              <div class="seg" id="nSex">
+                <button type="button" data-v="m" class="on">Мужской</button>
+                <button type="button" data-v="f">Женский</button>
+              </div>
+            </div>
+            <div class="row2">
+              <div class="field"><label for="nAge">Возраст</label><input id="nAge" type="number" min="14" max="90" /></div>
+              <div class="field"><label for="nHeight">Рост, см</label><input id="nHeight" type="number" min="130" max="230" /></div>
+            </div>
+            <div class="row2">
+              <div class="field"><label for="nWeight">Вес, кг</label><input id="nWeight" type="number" min="35" max="250" step="0.1" /></div>
+              <div class="field">
+                <label for="nAct">Активность</label>
+                <select id="nAct">
+                  <option value="1.2">Сидячая</option>
+                  <option value="1.375">1–2 тренировки</option>
+                  <option value="1.55">3–4 тренировки</option>
+                  <option value="1.725">5–6 тренировок</option>
+                  <option value="1.9">Физическая работа</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label>Цель</label>
+              <div class="seg" id="nGoal">
+                <button type="button" data-v="cut">Сушка</button>
+                <button type="button" data-v="keep">Форма</button>
+                <button type="button" data-v="mass">Масса</button>
+              </div>
+            </div>
+            <button class="btn wide" type="button" id="nSave">Сохранить в профиль</button>
+          </div>
+        </div>
+
+        <div class="card" id="normCard">
+          <div class="normbig"><b id="outKcal">0</b><span>ккал в день</span></div>
+          <p class="rmeta" id="outNote" style="margin-top:6px"></p>
+          <div class="bar" id="outBar"></div>
+          <div class="macros">
+            <div class="macro"><b id="outP">0 г</b><span>белки</span></div>
+            <div class="macro"><b id="outF">0 г</b><span>жиры</span></div>
+            <div class="macro"><b id="outC">0 г</b><span>углеводы</span></div>
+          </div>
+          <div class="split">
+            <div class="splitrow"><span>Завтрак · 25%</span><b id="mBreak">0</b></div>
+            <div class="splitrow"><span>Обед · 35%</span><b id="mLunch">0</b></div>
+            <div class="splitrow"><span>Ужин · 25%</span><b id="mDin">0</b></div>
+            <div class="splitrow"><span>Перекус · 15%</span><b id="mSnack">0</b></div>
+          </div>
+          <p class="foot" id="outBmr"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- TAB: РЕЦЕПТЫ ---- -->
+    <section class="tab" id="tab-recipes">
+      <div class="phead">
+        <h1>Рецепты</h1>
+        <p>Максимум 5 ингредиентов, 3–35 минут и шаги в стиле «положи, включи, жди».</p>
+      </div>
+      <div class="chips" id="fMeal" style="margin-bottom:10px"></div>
+      <div class="chips" id="fKind" style="margin-bottom:20px"></div>
+      <div class="rgrid" id="recipeGrid"></div>
+    </section>
+
+    <!-- ---- TAB: ДЕНЬ ---- -->
+    <section class="tab" id="tab-day">
+      <div class="phead">
+        <h1>Готовый день</h1>
+        <p>Одна кнопка — и завтрак, обед, ужин и перекус собираются под твою норму.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+        <button class="btn" type="button" id="dayGo">Собрать день</button>
+        <button class="btn ghost" type="button" id="dayGo2">Другой вариант</button>
+      </div>
+      <div class="slots" id="daySlots"></div>
+      <div class="kpis" id="dayTotal" style="margin-top:14px"></div>
+    </section>
+
+    <!-- ---- TAB: ВЕС ---- -->
+    <section class="tab" id="tab-weight">
+      <div class="phead">
+        <h1>Мой вес</h1>
+        <p>Записывай вес раз в несколько дней — график покажет реальную динамику, а не колебания воды.</p>
+      </div>
+      <div class="kpis" id="wStats" style="margin-bottom:16px"></div>
+      <div class="chartbox" style="margin-bottom:18px"><canvas id="chart"></canvas></div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="wform">
+          <div class="field"><label for="wKg">Вес, кг</label><input id="wKg" type="number" step="0.1" min="35" max="250" placeholder="76.4" /></div>
+          <div class="field"><label for="wDate">Дата</label><input id="wDate" type="date" /></div>
+          <button class="btn" type="button" id="wSave">Записать</button>
+        </div>
+      </div>
+      <div class="wlist" id="wList"></div>
+    </section>
+
+    <!-- ---- TAB: УПРАЖНЕНИЯ ---- -->
+    <section class="tab" id="tab-gym">
+      <div class="phead">
+        <h1>Упражнения в зале</h1>
+        <p>На каждую группу мышц: фото техники, какие мышцы работают, сколько подходов и главные ошибки новичка.</p>
+      </div>
+      <div class="chips" id="fGroup" style="margin-bottom:20px"></div>
+      <div class="egrid" id="gymGrid"></div>
+    </section>
+
+    <!-- ---- TAB: ИСТОРИЯ ---- -->
+    <section class="tab" id="tab-history">
+      <div class="phead">
+        <h1>История блюд</h1>
+        <p>Всё, что ты готовил, с оценкой от 1 до 5 звёзд и заметками.</p>
+      </div>
+      <div class="kpis" id="hStats" style="margin-bottom:16px"></div>
+      <div class="hlist" id="hList"></div>
+      <button class="logout" type="button" id="wipe" style="margin-top:18px;max-width:260px">Стереть все мои данные</button>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar"></nav>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div class="modal" id="recipeModal">
+  <div class="sheet">
+    <div class="sheethead">
+      <h3 id="rmTitle"></h3>
+      <button class="x" type="button" data-close="recipeModal">&times;</button>
+    </div>
+    <div class="sheetbody" id="rmBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="exModal">
+  <div class="sheet wide">
+    <div class="sheethead">
+      <h3 id="emTitle"></h3>
+      <button class="x" type="button" data-close="exModal">&times;</button>
+    </div>
+    <div class="sheetbody" id="emBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="rateModal">
+  <div class="sheet">
+    <div class="sheethead">
+      <h3 id="rateTitle"></h3>
+      <button class="x" type="button" data-close="rateModal">&times;</button>
+    </div>
+    <div class="sheetbody">
+      <p class="rmeta">Как получилось? Оценка попадёт в историю, а на карточке рецепта появится твой средний балл.</p>
+      <div class="starpick" id="starPick">
+        <button type="button" data-s="1">★</button>
+        <button type="button" data-s="2">★</button>
+        <button type="button" data-s="3">★</button>
+        <button type="button" data-s="4">★</button>
+        <button type="button" data-s="5">★</button>
+      </div>
+      <div class="field"><label for="rateDate">Когда готовил</label><input id="rateDate" type="date" /></div>
+      <div class="field"><label for="rateNote">Заметка (необязательно)</label><input id="rateNote" type="text" placeholder="В следующий раз меньше соли" /></div>
+      <button class="btn wide" type="button" id="rateSave">Добавить в историю</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+<script src="/static/data.js"></script>
+<script src="/static/app.js"></script>
+
+</body>
+</html>

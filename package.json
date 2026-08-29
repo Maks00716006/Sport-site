@@ -1,0 +1,11 @@
+{
+  "name": "forma-app",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler pages dev public --ip 0.0.0.0 --port 3000",
+    "deploy": "wrangler pages deploy public --project-name forma-app"
+  },
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}
