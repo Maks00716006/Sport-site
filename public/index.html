@@ -9,92 +9,154 @@
 <body>
 <!-- ============ AUTH ============ -->
 <div class="auth" id="auth">
-  <div class="authart">
-    <img src="/static/img/hero.jpeg" alt="" />
-    <div class="authtext">
-      <h1>Питание и тренировки<br />в одном месте</h1>
-      <p>Норма КБЖУ, простые рецепты для тех, кто не умеет готовить, дневник веса и база упражнений с фото техники.</p>
-      <div class="authlist">
-        <span>16 рецептов</span>
-        <span>12 упражнений</span>
-        <span>График веса</span>
-        <span>Счётчик КБЖУ</span>
-      </div>
+  <div class="authwrap">
+
+    <!-- декоративная гантеля сверху карточки -->
+    <div class="mascot" id="mascot" aria-hidden="true">
+      <svg viewBox="0 0 200 90" xmlns="http://www.w3.org/2000/svg">
+        <rect class="db-bar" x="55" y="37" width="90" height="16" rx="8"/>
+        <rect class="db-collar" x="46" y="33" width="9" height="24" rx="3"/>
+        <rect class="db-collar" x="145" y="33" width="9" height="24" rx="3"/>
+        <rect class="db-plate db-plate-lg" x="18" y="10" width="26" height="70" rx="9"/>
+        <rect class="db-plate db-plate-sm" x="44" y="20" width="13" height="50" rx="6"/>
+        <rect class="db-plate db-plate-lg" x="156" y="10" width="26" height="70" rx="9"/>
+        <rect class="db-plate db-plate-sm" x="143" y="20" width="13" height="50" rx="6"/>
+      </svg>
     </div>
-  </div>
 
-  <div class="authside">
-    <div class="authcard">
-      <div class="brand"><span class="dot"></span> ФОРМА</div>
+    <!-- step 1: login / register — скользящая двухпанельная карточка -->
+    <div id="authStep1">
+      <div class="authslide" id="authSlide">
+        <div class="aslide-brand"><span class="dot"></span> ФОРМА</div>
 
-      <!-- step 1: login / register -->
-      <div id="authStep1">
-        <h2 id="authTitle">С возвращением</h2>
-        <p class="sub" id="authSub">Войди в аккаунт, чтобы увидеть свою норму, вес и историю.</p>
+        <div class="aslide-body">
+          <div class="aforms" id="aForms">
 
-        <div class="switch">
-          <button type="button" id="swLogin" class="on">Войти</button>
-          <button type="button" id="swReg">Создать аккаунт</button>
+            <!-- вход -->
+            <div class="aform aform-signin">
+              <h2>Войти</h2>
+              <p class="sub">Используй свой логин и пароль</p>
+              <div class="form">
+                <div class="field ic">
+                  <label for="aMail">Почта или логин</label>
+                  <div class="inputwrap">
+                    <svg class="ic-l" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/></svg>
+                    <input id="aMail" type="text" placeholder="maxim@mail.ru" autocomplete="username" />
+                  </div>
+                </div>
+                <div class="field ic">
+                  <label for="aPass">Пароль</label>
+                  <div class="inputwrap">
+                    <svg class="ic-l" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                    <input id="aPass" type="password" placeholder="минимум 4 символа" autocomplete="current-password" />
+                    <button type="button" class="ic-r" id="pwToggle" aria-label="Показать пароль">
+                      <svg class="eyeOpen" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg class="eyeClosed" viewBox="0 0 24 24" style="display:none"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M6.1 6.1A13 13 0 0 0 1 12s4 7 11 7a10.6 10.6 0 0 0 4-.8M17.9 17.9A13 13 0 0 0 23 12s-4-7-11-7c-.7 0-1.4.05-2.1.15"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="err" id="authErr"></div>
+                <button class="btn wide" type="button" id="authGo">Войти</button>
+                <p class="aswitch mobile-only">Нет аккаунта? <a href="#" id="toSignupM">Создать</a></p>
+              </div>
+            </div>
+
+            <!-- регистрация -->
+            <div class="aform aform-signup">
+              <h2>Создать аккаунт</h2>
+              <p class="sub">или используй почту для регистрации</p>
+              <div class="form">
+                <div class="field ic">
+                  <label for="aNameUp">Как тебя зовут</label>
+                  <div class="inputwrap">
+                    <svg class="ic-l" viewBox="0 0 24 24"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z"/><path d="M4 20c1-3.6 4.2-6 8-6s7 2.4 8 6"/></svg>
+                    <input id="aNameUp" type="text" placeholder="Максим" autocomplete="name" />
+                  </div>
+                </div>
+                <div class="field ic">
+                  <label for="aMailUp">Почта или логин</label>
+                  <div class="inputwrap">
+                    <svg class="ic-l" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7l8 6 8-6"/></svg>
+                    <input id="aMailUp" type="text" placeholder="maxim@mail.ru" autocomplete="username" />
+                  </div>
+                </div>
+                <div class="field ic">
+                  <label for="aPassUp">Пароль</label>
+                  <div class="inputwrap">
+                    <svg class="ic-l" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                    <input id="aPassUp" type="password" placeholder="минимум 4 символа" autocomplete="new-password" />
+                    <button type="button" class="ic-r" id="pwToggleUp" aria-label="Показать пароль">
+                      <svg class="eyeOpen" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg class="eyeClosed" viewBox="0 0 24 24" style="display:none"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M6.1 6.1A13 13 0 0 0 1 12s4 7 11 7a10.6 10.6 0 0 0 4-.8M17.9 17.9A13 13 0 0 0 23 12s-4-7-11-7c-.7 0-1.4.05-2.1.15"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="err" id="authErrUp"></div>
+                <button class="btn wide" type="button" id="authGoUp">Продолжить</button>
+                <p class="aswitch mobile-only">Уже есть аккаунт? <a href="#" id="toSigninM">Войти</a></p>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="aoverlay-container" id="aOverlayC">
+            <div class="aoverlay">
+              <div class="aoverlay-panel aoverlay-left">
+                <h2>С возвращением!</h2>
+                <p>Чтобы оставаться на связи, войди со своими данными</p>
+                <button class="btn ghost wide" type="button" id="toSignin">Войти</button>
+              </div>
+              <div class="aoverlay-panel aoverlay-right">
+                <h2>Привет, друг!</h2>
+                <p>Введи данные и начни путь к своей форме</p>
+                <button class="btn ghost wide" type="button" id="toSignup">Создать аккаунт</button>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <div class="form">
-          <div class="field" id="fName" style="display:none">
-            <label for="aName">Как тебя зовут</label>
-            <input id="aName" type="text" placeholder="Максим" autocomplete="name" />
-          </div>
-          <div class="field">
-            <label for="aMail">Почта или логин</label>
-            <input id="aMail" type="text" placeholder="maxim@mail.ru" autocomplete="username" />
-          </div>
-          <div class="field">
-            <label for="aPass">Пароль</label>
-            <input id="aPass" type="password" placeholder="минимум 4 символа" autocomplete="current-password" />
-          </div>
-          <div class="err" id="authErr"></div>
-          <button class="btn wide" type="button" id="authGo">Войти</button>
-        </div>
-        <p class="foot">Аккаунт хранится только в этом браузере — никакие данные никуда не отправляются.</p>
       </div>
+      <p class="foot" style="text-align:center;max-width:400px;margin:16px auto 0">Аккаунт хранится только в этом браузере — никакие данные никуда не отправляются.</p>
+    </div>
 
-      <!-- step 2: onboarding -->
-      <div id="authStep2" style="display:none">
-        <h2>Параметры для расчёта</h2>
-        <p class="sub">Пять полей — и сайт сразу посчитает твою норму КБЖУ.</p>
-        <div class="form">
-          <div class="field">
-            <label>Пол</label>
-            <div class="seg" id="oSex">
-              <button type="button" data-v="m" class="on">Мужской</button>
-              <button type="button" data-v="f">Женский</button>
-            </div>
+    <!-- step 2: onboarding -->
+    <div class="authcard" id="authStep2" style="display:none">
+      <div class="brand"><span class="dot"></span> ФОРМА</div>
+      <h2>Параметры для расчёта</h2>
+      <p class="sub">Пять полей — и сайт сразу посчитает твою норму КБЖУ.</p>
+      <div class="form">
+        <div class="field">
+          <label>Пол</label>
+          <div class="seg" id="oSex">
+            <button type="button" data-v="m" class="on">Мужской</button>
+            <button type="button" data-v="f">Женский</button>
           </div>
-          <div class="row2">
-            <div class="field"><label for="oAge">Возраст</label><input id="oAge" type="number" value="20" min="14" max="90" /></div>
-            <div class="field"><label for="oHeight">Рост, см</label><input id="oHeight" type="number" value="180" min="130" max="230" /></div>
-          </div>
-          <div class="row2">
-            <div class="field"><label for="oWeight">Вес, кг</label><input id="oWeight" type="number" value="75" min="35" max="250" step="0.1" /></div>
-            <div class="field">
-              <label for="oAct">Активность</label>
-              <select id="oAct">
-                <option value="1.2">Сидячая</option>
-                <option value="1.375">1–2 тренировки</option>
-                <option value="1.55" selected>3–4 тренировки</option>
-                <option value="1.725">5–6 тренировок</option>
-                <option value="1.9">Физическая работа</option>
-              </select>
-            </div>
-          </div>
-          <div class="field">
-            <label>Цель</label>
-            <div class="seg" id="oGoal">
-              <button type="button" data-v="cut">Сушка</button>
-              <button type="button" data-v="keep" class="on">Форма</button>
-              <button type="button" data-v="mass">Масса</button>
-            </div>
-          </div>
-          <button class="btn wide" type="button" id="onbGo">Начать</button>
         </div>
+        <div class="row2">
+          <div class="field"><label for="oAge">Возраст</label><input id="oAge" type="number" value="20" min="14" max="90" /></div>
+          <div class="field"><label for="oHeight">Рост, см</label><input id="oHeight" type="number" value="180" min="130" max="230" /></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="oWeight">Вес, кг</label><input id="oWeight" type="number" value="75" min="35" max="250" step="0.1" /></div>
+          <div class="field">
+            <label for="oAct">Активность</label>
+            <select id="oAct">
+              <option value="1.2">Сидячая</option>
+              <option value="1.375">1–2 тренировки</option>
+              <option value="1.55" selected>3–4 тренировки</option>
+              <option value="1.725">5–6 тренировок</option>
+              <option value="1.9">Физическая работа</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Цель</label>
+          <div class="seg" id="oGoal">
+            <button type="button" data-v="cut">Сушка</button>
+            <button type="button" data-v="keep" class="on">Форма</button>
+            <button type="button" data-v="mass">Масса</button>
+          </div>
+        </div>
+        <button class="btn wide" type="button" id="onbGo">Начать</button>
       </div>
     </div>
   </div>

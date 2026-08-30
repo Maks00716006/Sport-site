@@ -17,19 +17,29 @@ function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('
 let authMode = 'login';
 function setMode(m){
   authMode = m;
-  $('swLogin').classList.toggle('on', m === 'login');
-  $('swReg').classList.toggle('on', m === 'reg');
-  $('fName').style.display = m === 'reg' ? '' : 'none';
-  $('authTitle').textContent = m === 'reg' ? 'Создаём аккаунт' : 'С возвращением';
-  $('authSub').textContent = m === 'reg'
-    ? 'Два шага: логин и параметры тела для расчёта КБЖУ.'
-    : 'Войди в аккаунт, чтобы увидеть свою норму, вес и историю.';
-  $('authGo').textContent = m === 'reg' ? 'Продолжить' : 'Войти';
-  $('aPass').setAttribute('autocomplete', m === 'reg' ? 'new-password' : 'current-password');
+  const slide = $('authSlide');
+  if(slide) slide.classList.toggle('signup-active', m === 'reg');
   $('authErr').textContent = '';
+  $('authErrUp').textContent = '';
 }
-$('swLogin').onclick = function(){ setMode('login'); };
-$('swReg').onclick = function(){ setMode('reg'); };
+$('toSignup').onclick = function(){ setMode('reg'); };
+$('toSignin').onclick = function(){ setMode('login'); };
+$('toSignupM').onclick = function(e){ e.preventDefault(); setMode('reg'); };
+$('toSigninM').onclick = function(e){ e.preventDefault(); setMode('login'); };
+
+function pwToggleInit(btnId, inputId){
+  const btn = $(btnId), input = $(inputId);
+  if(!btn || !input) return;
+  btn.onclick = function(){
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.querySelector('.eyeOpen').style.display = show ? 'none' : '';
+    btn.querySelector('.eyeClosed').style.display = show ? '' : 'none';
+    btn.setAttribute('aria-label', show ? 'Скрыть пароль' : 'Показать пароль');
+  };
+}
+pwToggleInit('pwToggle', 'aPass');
+pwToggleInit('pwToggleUp', 'aPassUp');
 
 function segInit(id, cb){
   const box = $(id); if(!box) return;
@@ -51,25 +61,36 @@ $('authGo').onclick = function(){
   const mail = $('aMail').value.trim().toLowerCase();
   const pass = $('aPass').value;
   const err = $('authErr');
+  err.textContent = '';
   if(!mail){ err.textContent = 'Введи почту или логин.'; return; }
   if(pass.length < 4){ err.textContent = 'Пароль от 4 символов.'; return; }
   USERS = readUsers();
-  if(authMode === 'login'){
-    const u = USERS[mail];
-    if(!u){ err.textContent = 'Такого аккаунта нет. Нажми «Создать аккаунт».'; return; }
-    if(u.pass !== pass){ err.textContent = 'Неверный пароль.'; return; }
-    enter(mail);
-  } else {
-    const name = $('aName').value.trim();
-    if(!name){ err.textContent = 'Напиши, как тебя зовут.'; return; }
-    if(USERS[mail]){ err.textContent = 'Такой аккаунт уже есть — войди.'; return; }
-    pending = { mail: mail, name: name, pass: pass };
-    $('authStep1').style.display = 'none';
-    $('authStep2').style.display = '';
-  }
+  const u = USERS[mail];
+  if(!u){ err.textContent = 'Такого аккаунта нет. Нажми «Создать аккаунт».'; return; }
+  if(u.pass !== pass){ err.textContent = 'Неверный пароль.'; return; }
+  enter(mail);
 };
 $('aPass').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGo').click(); });
 $('aMail').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGo').click(); });
+
+$('authGoUp').onclick = function(){
+  const mail = $('aMailUp').value.trim().toLowerCase();
+  const pass = $('aPassUp').value;
+  const name = $('aNameUp').value.trim();
+  const err = $('authErrUp');
+  err.textContent = '';
+  if(!name){ err.textContent = 'Напиши, как тебя зовут.'; return; }
+  if(!mail){ err.textContent = 'Введи почту или логин.'; return; }
+  if(pass.length < 4){ err.textContent = 'Пароль от 4 символов.'; return; }
+  USERS = readUsers();
+  if(USERS[mail]){ err.textContent = 'Такой аккаунт уже есть — войди.'; return; }
+  pending = { mail: mail, name: name, pass: pass };
+  $('authStep1').style.display = 'none';
+  $('authStep2').style.display = '';
+};
+$('aPassUp').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGoUp').click(); });
+$('aMailUp').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGoUp').click(); });
+$('aNameUp').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGoUp').click(); });
 
 $('onbGo').onclick = function(){
   const p = pending; if(!p) return;
@@ -105,7 +126,9 @@ function leave(){
   $('app').style.display = 'none';
   $('auth').style.display = '';
   $('authStep1').style.display = ''; $('authStep2').style.display = 'none';
-  $('aPass').value = ''; setMode('login');
+  $('aPass').value = ''; $('aMail').value = '';
+  $('aPassUp').value = ''; $('aMailUp').value = ''; $('aNameUp').value = '';
+  setMode('login');
   window.scrollTo(0, 0);
 }
 $('logout').onclick = leave;
@@ -626,4 +649,22 @@ setMode('login');
   let s = null;
   try { s = localStorage.getItem(LSS); } catch(e){}
   if(s && USERS[s]) enter(s);
+})();
+
+/* ================= маскот-гантеля: медленно поворачивается к курсору ================= */
+(function(){
+  const mascot = $('mascot'); if(!mascot) return;
+  let raf = null;
+  document.addEventListener('mousemove', function(e){
+    if(raf) return;
+    raf = requestAnimationFrame(function(){
+      raf = null;
+      const half = window.innerWidth / 2;
+      const dx = (e.clientX - half) / half; // от -1 (слева) до 1 (справа)
+      const shift = Math.max(-1, Math.min(1, dx)) * 14; // px смещения
+      const rot = Math.max(-1, Math.min(1, dx)) * 5;    // deg наклона
+      mascot.style.setProperty('--mx', shift.toFixed(1) + 'px');
+      mascot.style.setProperty('--mr', rot.toFixed(1) + 'deg');
+    });
+  });
 })();

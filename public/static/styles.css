@@ -18,31 +18,85 @@
   ::selection{background:var(--lime);color:var(--ink);}
   .mono{font-variant-numeric:tabular-nums;}
 
-  /* ---------- auth ---------- */
-  .auth{min-height:100vh;display:grid;grid-template-columns:1.05fr .95fr;}
-  .authart{position:relative;overflow:hidden;background:#101215;}
-  .authart img{width:100%;height:100%;object-fit:cover;opacity:.55;filter:saturate(.9);}
-  .authart::after{content:'';position:absolute;inset:0;background:
-    radial-gradient(120% 80% at 20% 10%, rgba(201,244,92,.16), transparent 60%),
-    linear-gradient(180deg, rgba(11,12,14,.35), rgba(11,12,14,.92));}
-  .authtext{position:absolute;left:56px;right:56px;bottom:56px;z-index:2;}
-  .authtext h1{font-size:40px;line-height:1.08;letter-spacing:-.02em;font-weight:800;}
-  .authtext p{color:#C7CDD4;margin-top:14px;max-width:420px;font-size:15px;}
-  .authlist{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px;}
-  .authlist span{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);
-    border-radius:999px;padding:7px 13px;font-size:12.5px;color:#E4E8EC;backdrop-filter:blur(4px);}
-  .authside{display:flex;align-items:center;justify-content:center;padding:40px 32px;}
-  .authcard{width:100%;max-width:400px;}
+  /* ---------- auth (скользящая карточка вход/регистрация) ---------- */
+  .auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;
+    background:var(--bg);}
+  .authwrap{position:relative;width:100%;max-width:760px;}
+  @keyframes cardIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
   .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.14em;font-size:14px;}
   .dot{width:10px;height:10px;border-radius:50%;background:var(--lime);box-shadow:0 0 16px rgba(201,244,92,.7);}
+  .form{margin-top:20px;display:grid;gap:14px;}
+
+  /* статичная карточка (шаг 2 — онбординг) */
+  .authcard{width:100%;max-width:400px;margin:0 auto;position:relative;z-index:2;background:var(--panel);
+    border:1px solid var(--line);border-radius:24px;padding:52px 30px 30px;
+    box-shadow:0 24px 48px -18px rgba(0,0,0,.55);
+    animation:cardIn .4s ease-out;}
   .authcard h2{font-size:27px;letter-spacing:-.02em;margin-top:26px;font-weight:750;}
   .authcard .sub{color:var(--muted);margin-top:8px;font-size:14px;}
+
+  /* шаг 1 — скользящая двухпанельная карточка «вход / регистрация» */
+  .authslide{position:relative;width:100%;background:var(--panel);border:1px solid var(--line);
+    border-radius:24px;overflow:hidden;box-shadow:0 24px 48px -18px rgba(0,0,0,.55);
+    animation:cardIn .4s ease-out;}
+  .aslide-brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.14em;
+    font-size:13px;padding:26px 30px 0;}
+  .aslide-body{position:relative;width:100%;height:500px;margin-top:6px;}
+
+  .aforms{position:absolute;inset:0;}
+  .aform{position:absolute;top:0;left:0;height:100%;width:50%;padding:44px 46px 30px;
+    background:var(--panel);
+    display:flex;flex-direction:column;overflow-y:auto;
+    transition:transform .6s ease-in-out,opacity .6s ease-in-out;}
+  .aform h2{font-size:25px;letter-spacing:-.02em;font-weight:750;}
+  .aform .sub{color:var(--muted);margin-top:6px;font-size:13.5px;}
+  .aform .form{flex:1;display:flex;flex-direction:column;gap:14px;}
+  .aform .form>.btn.wide{margin-top:auto;}
+  .aform-signin{z-index:2;}
+  .aform-signup{opacity:0;z-index:1;}
+  .authslide.signup-active .aform-signin{transform:translateX(100%);}
+  .authslide.signup-active .aform-signup{transform:translateX(100%);opacity:1;z-index:5;animation:aformShow .6s;}
+  @keyframes aformShow{0%,49.99%{opacity:0;z-index:1;}50%,100%{opacity:1;z-index:5;}}
+
+  .aoverlay-container{position:absolute;top:0;left:50%;width:50%;height:100%;overflow:hidden;
+    transition:transform .6s ease-in-out;z-index:100;}
+  .authslide.signup-active .aoverlay-container{transform:translateX(-100%);}
+  .aoverlay{position:relative;left:-100%;height:100%;width:200%;background:var(--lime);
+    transform:translateX(0);transition:transform .6s ease-in-out;}
+  .authslide.signup-active .aoverlay{transform:translateX(50%);}
+  .aoverlay-panel{position:absolute;top:0;height:100%;width:50%;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px;padding:0 46px;text-align:center;
+    color:var(--ink);transform:translateX(0);transition:transform .6s ease-in-out;}
+  .aoverlay-panel h2{font-size:25px;font-weight:800;}
+  .aoverlay-panel p{font-size:13.5px;line-height:1.55;opacity:.82;}
+  .aoverlay-panel .btn.ghost{border:1.5px solid var(--ink);color:var(--ink);background:transparent;}
+  .aoverlay-panel .btn.ghost:hover{background:var(--ink);color:var(--lime);border-color:var(--ink);}
+  .aoverlay-left{left:0;transform:translateX(-20%);}
+  .authslide.signup-active .aoverlay-left{transform:translateX(0);}
+  .aoverlay-right{left:50%;transform:translateX(0);}
+  .authslide.signup-active .aoverlay-right{transform:translateX(20%);}
+
+  .aswitch.mobile-only{display:none;}
+
+  @media (max-width:700px){
+    .authwrap{max-width:400px;}
+    .aslide-body{height:auto;}
+    .aforms{position:relative;inset:auto;}
+    .aform{position:relative;width:100%;padding:10px 6px 6px;transition:none;}
+    .aform-signin{display:flex;}
+    .aform-signup{display:none;opacity:1;z-index:1;}
+    .authslide.signup-active .aform-signin{display:none;transform:none;}
+    .authslide.signup-active .aform-signup{display:flex;transform:none;}
+    .aoverlay-container{display:none;}
+    .aswitch.mobile-only{display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--muted);}
+    .aswitch.mobile-only a{color:var(--lime);font-weight:700;}
+  }
+
   .switch{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;padding:4px;margin-top:24px;}
   .switch button{flex:1;padding:10px 12px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted);transition:.15s;}
   .switch button.on{background:var(--lime);color:var(--ink);}
   .switch button:not(.on):hover{color:var(--text);}
-  .form{margin-top:20px;display:grid;gap:14px;}
   .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:7px;letter-spacing:.01em;}
   .field input,.field select{width:100%;height:46px;padding:0 14px;background:#0F1113;
     border:1px solid var(--line);border-radius:12px;transition:.15s;}
@@ -61,6 +115,26 @@
   .btn.sm{height:40px;padding:0 16px;font-size:14px;border-radius:10px;}
   .err{color:var(--red);font-size:13px;min-height:18px;}
   .foot{color:var(--muted);font-size:12.5px;margin-top:18px;line-height:1.5;}
+
+  /* декоративная гантеля над карточкой */
+  .mascot{position:absolute;top:-34px;left:0;right:0;display:flex;justify-content:center;z-index:3;
+    pointer-events:none;--mx:0px;--mr:0deg;}
+  .mascot svg{width:120px;height:auto;overflow:visible;
+    transform:translateX(var(--mx)) rotate(var(--mr));
+    transition:transform .5s cubic-bezier(.2,.7,.2,1);}
+  .db-bar{fill:var(--lime);}
+  .db-collar{fill:var(--ink);opacity:.35;}
+  .db-plate{fill:var(--panel2);stroke:var(--line2);stroke-width:1.5;}
+  .db-plate-sm{fill:var(--panel2);stroke:var(--line2);}
+
+  .field.ic .inputwrap{position:relative;display:flex;align-items:center;}
+  .field.ic .inputwrap input{padding-left:42px;padding-right:40px;}
+  .field.ic .ic-l{position:absolute;left:14px;width:17px;height:17px;stroke:var(--muted);fill:none;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none;transition:.15s;}
+  .field.ic .inputwrap:focus-within .ic-l{stroke:var(--lime);}
+  .ic-r{position:absolute;right:12px;width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--muted);}
+  .ic-r:hover{color:var(--text);background:var(--panel2);}
+  .ic-r svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
 
   /* ---------- app shell ---------- */
   .shell{display:grid;grid-template-columns:250px 1fr;min-height:100vh;}
@@ -266,9 +340,6 @@
     .slots{grid-template-columns:repeat(2,1fr);}
   }
   @media (max-width:900px){
-    .auth{grid-template-columns:1fr;}
-    .authart{display:none;}
-    .authside{align-items:flex-start;padding-top:52px;}
     .shell{grid-template-columns:1fr;}
     .side{display:none;}
     .main{padding:24px 18px 100px;}
