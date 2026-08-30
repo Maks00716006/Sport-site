@@ -169,13 +169,16 @@
         </div>
 
         <div class="card" id="normCard">
-          <div class="normbig"><b id="outKcal">0</b><span>ккал в день</span></div>
+          <svg class="pulseline" viewBox="0 0 400 40" preserveAspectRatio="none">
+            <polyline points="0,20 40,20 55,20 65,4 75,36 85,20 100,20 140,20 155,20 165,4 175,36 185,20 200,20 240,20 255,20 265,4 275,36 285,20 300,20 340,20 355,20 365,4 375,36 385,20 400,20"/>
+          </svg>
+          <div class="normbig"><b id="outKcal" class="numanim">0</b><span>ккал в день</span></div>
           <p class="rmeta" id="outNote" style="margin-top:6px"></p>
           <div class="bar" id="outBar"></div>
           <div class="macros">
-            <div class="macro"><b id="outP">0 г</b><span>белки</span></div>
-            <div class="macro"><b id="outF">0 г</b><span>жиры</span></div>
-            <div class="macro"><b id="outC">0 г</b><span>углеводы</span></div>
+            <div class="macro" id="macroP"><b id="outP">0 г</b><span>белки</span></div>
+            <div class="macro" id="macroF"><b id="outF">0 г</b><span>жиры</span></div>
+            <div class="macro" id="macroC"><b id="outC">0 г</b><span>углеводы</span></div>
           </div>
           <div class="split">
             <div class="splitrow"><span>Завтрак · 25%</span><b id="mBreak">0</b></div>
@@ -194,23 +197,36 @@
         <h1>Рецепты</h1>
         <p>Максимум 5 ингредиентов, 3–35 минут и шаги в стиле «положи, включи, жди».</p>
       </div>
-      <div class="chips" id="fMeal" style="margin-bottom:10px"></div>
-      <div class="chips" id="fKind" style="margin-bottom:20px"></div>
-      <div class="rgrid" id="recipeGrid"></div>
-    </section>
 
-    <!-- ---- TAB: ДЕНЬ ---- -->
-    <section class="tab" id="tab-day">
-      <div class="phead">
-        <h1>Готовый день</h1>
-        <p>Одна кнопка — и завтрак, обед, ужин и перекус собираются под твою норму.</p>
+      <div class="seg rsub" id="rSub">
+        <button type="button" data-v="all" class="on">Все рецепты</button>
+        <button type="button" data-v="day">Готовый день</button>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">
-        <button class="btn" type="button" id="dayGo">Собрать день</button>
-        <button class="btn ghost" type="button" id="dayGo2">Другой вариант</button>
+
+      <!-- вид: все рецепты -->
+      <div id="viewAll">
+        <div class="chips" id="fMeal" style="margin-bottom:10px"></div>
+        <div class="chips" id="fKind" style="margin-bottom:20px"></div>
+        <div class="rgrid" id="recipeGrid"></div>
       </div>
-      <div class="slots" id="daySlots"></div>
-      <div class="kpis" id="dayTotal" style="margin-top:14px"></div>
+
+      <!-- вид: готовый день -->
+      <div id="viewDay" style="display:none">
+        <div class="daycard">
+          <div class="daycard-head">
+            <div>
+              <b>Собери меню на день под свою норму</b>
+              <span>Завтрак, обед, ужин и перекус — калории подгонятся под цель автоматически.</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn" type="button" id="dayGo"><i class="dice">🎲</i> Собрать день</button>
+              <button class="btn ghost" type="button" id="dayGo2">Другой вариант</button>
+            </div>
+          </div>
+        </div>
+        <div class="slots" id="daySlots"></div>
+        <div class="kpis" id="dayTotal" style="margin-top:14px"></div>
+      </div>
     </section>
 
     <!-- ---- TAB: ВЕС ---- -->

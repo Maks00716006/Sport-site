@@ -123,7 +123,6 @@ const IC = {
 const TABS = [
   { id:'norm', label:'Норма КБЖУ', short:'КБЖУ' },
   { id:'recipes', label:'Рецепты', short:'Рецепты' },
-  { id:'day', label:'Готовый день', short:'День' },
   { id:'weight', label:'Мой вес', short:'Вес' },
   { id:'gym', label:'Упражнения', short:'Зал' },
   { id:'history', label:'История блюд', short:'История' }
@@ -139,9 +138,15 @@ function go(id){
   document.querySelectorAll('.tab').forEach(function(s){ s.classList.toggle('on', s.id === 'tab-' + id); });
   document.querySelectorAll('[data-go]').forEach(function(b){ b.classList.toggle('on', b.dataset.go === id); });
   if(id === 'weight') drawChart();
-  if(id === 'day' && !$('daySlots').children.length) buildDay();
   window.scrollTo(0, 0);
 }
+
+/* ---- подвкладки внутри "Рецепты": все рецепты / готовый день ---- */
+segInit('rSub', function(v){
+  $('viewAll').style.display = v === 'all' ? '' : 'none';
+  $('viewDay').style.display = v === 'day' ? '' : 'none';
+  if(v === 'day' && !$('daySlots').children.length) buildDay();
+});
 document.addEventListener('click', function(e){
   const b = e.target.closest('[data-go]');
   if(b) go(b.dataset.go);
@@ -157,6 +162,26 @@ document.addEventListener('keydown', function(e){
 
 /* ================= НОРМА КБЖУ ================= */
 let norm = { kcal:2600, p:150, f:70, c:300 };
+let normBarBuilt = false;
+
+/* плавный счётчик числа */
+function animateNum(el, from, to, suffix, ms){
+  suffix = suffix || ''; ms = ms || 550;
+  cancelAnimationFrame(el._raf);
+  const t0 = performance.now();
+  const ease = function(x){ return 1 - Math.pow(1 - x, 3); };
+  function step(now){
+    const p = Math.min(1, (now - t0) / ms);
+    const v = Math.round(from + (to - from) * ease(p));
+    el.textContent = v.toLocaleString('ru-RU') + suffix;
+    if(p < 1) el._raf = requestAnimationFrame(step);
+    else el.textContent = to.toLocaleString('ru-RU') + suffix;
+  }
+  el._raf = requestAnimationFrame(step);
+}
+function pulse(el){
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+}
 
 function fillNorm(){
   const p = ME.profile;
@@ -176,20 +201,33 @@ function calcNorm(){
   const p = Math.round(w * (goal === 'cut' ? 2.2 : goal === 'mass' ? 2.0 : 1.8));
   const f = Math.round(w * (goal === 'cut' ? 0.8 : 0.9));
   const c = Math.max(50, Math.round((kcal - p*4 - f*9) / 4));
+  const prevKcal = norm.kcal;
   norm = { kcal:kcal, p:p, f:f, c:c };
 
-  $('outKcal').textContent = kcal.toLocaleString('ru-RU');
+  animateNum($('outKcal'), prevKcal || kcal, kcal);
   $('outP').textContent = p + ' г'; $('outF').textContent = f + ' г'; $('outC').textContent = c + ' г';
+  pulse($('macroP')); pulse($('macroF')); pulse($('macroC'));
   $('outNote').textContent = goal === 'cut' ? 'Сушка: минус 18% от расхода, белок высокий — мышцы остаются.'
     : goal === 'mass' ? 'Масса: плюс 12% к расходу — рост без лишнего жира.'
     : 'Форма: едим ровно столько, сколько тратим.';
   $('outBmr').textContent = 'Основной обмен ' + Math.round(bmr) + ' ккал · расход с активностью ' + Math.round(tdee) + ' ккал';
 
   const kp = p*4, kf = f*9, kc = c*4, tot = kp + kf + kc;
-  $('outBar').innerHTML =
-    '<i style="width:' + (kp/tot*100) + '%;background:#C9F45C"></i>' +
-    '<i style="width:' + (kf/tot*100) + '%;background:#5FD08C"></i>' +
-    '<i style="width:' + (kc/tot*100) + '%;background:#4C8DFF"></i>';
+  if(!normBarBuilt){
+    $('outBar').innerHTML =
+      '<i style="width:0%;background:#C9F45C" data-k="p"></i>' +
+      '<i style="width:0%;background:#5FD08C" data-k="f"></i>' +
+      '<i style="width:0%;background:#4C8DFF" data-k="c"></i>';
+    normBarBuilt = true;
+    requestAnimationFrame(function(){ requestAnimationFrame(setBar); });
+  } else {
+    setBar();
+  }
+  function setBar(){
+    $('outBar').querySelector('[data-k="p"]').style.width = (kp/tot*100) + '%';
+    $('outBar').querySelector('[data-k="f"]').style.width = (kf/tot*100) + '%';
+    $('outBar').querySelector('[data-k="c"]').style.width = (kc/tot*100) + '%';
+  }
   $('mBreak').textContent = Math.round(kcal*0.25) + ' ккал';
   $('mLunch').textContent = Math.round(kcal*0.35) + ' ккал';
   $('mDin').textContent = Math.round(kcal*0.25) + ' ккал';
@@ -235,21 +273,31 @@ function starsHtml(n){
   for(let i = 1; i <= 5; i++) out += i <= Math.round(n) ? '★' : '<i>★</i>';
   return out;
 }
+const KIND_ICON = {
+  'без огня':'❄️', 'микроволновка':'📻', '1 сковорода':'🍳', 'духовка':'🔥', 'кастрюля':'🥘'
+};
+function foodThumb(r){
+  if(r.img) return '<img src="' + r.img + '" alt="' + esc(r.name) + '" loading="lazy" />';
+  return '<div class="rph-ph"><span>' + (KIND_ICON[r.kind] || '🍽️') + '</span></div>';
+}
 function renderRecipes(){
   const list = RECIPES.filter(function(r){
     return (fMeal === 'all' || r.meal.indexOf(fMeal) >= 0) && (fKind === 'all' || r.kind === fKind);
   });
   if(!list.length){ $('recipeGrid').innerHTML = '<div class="empty">Под такие фильтры ничего нет. Сбрось один из них.</div>'; return; }
-  $('recipeGrid').innerHTML = list.map(function(r){
+  $('recipeGrid').innerHTML = list.map(function(r, i){
     const av = avgStars(r.id);
-    return '<article class="rcard">' +
-      '<div class="rtop"><h3>' + esc(r.name) + '</h3><span class="tag">' + r.kcal + ' ккал</span></div>' +
-      '<div class="rmeta">' + r.time + ' мин · ' + r.kind + ' · ' + r.meal.map(function(m){ return MEAL_LABEL[m]; }).join(', ') + '</div>' +
-      '<div class="kb"><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span>' + r.ing.length + ' ингредиентов</span></div>' +
-      '<div class="rfoot">' +
-        '<button class="btn sm ghost" type="button" onclick="openRecipe(' + r.id + ')">Как готовить</button>' +
-        '<button class="linkbtn" type="button" onclick="openRate(' + r.id + ')">Оценить</button>' +
-        (av ? '<span class="stars" style="margin-left:auto">' + starsHtml(av) + '</span>' : '') +
+    return '<article class="rcard" style="--d:' + Math.min(i, 12) * 0.04 + 's">' +
+      '<div class="rphoto">' + foodThumb(r) + '<span class="rtag">' + r.kcal + ' ккал</span></div>' +
+      '<div class="rbody">' +
+        '<div class="rtop"><h3>' + esc(r.name) + '</h3></div>' +
+        '<div class="rmeta">' + r.time + ' мин · ' + r.kind + ' · ' + r.meal.map(function(m){ return MEAL_LABEL[m]; }).join(', ') + '</div>' +
+        '<div class="kb"><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span>' + r.ing.length + ' ингредиентов</span></div>' +
+        '<div class="rfoot">' +
+          '<button class="btn sm ghost" type="button" onclick="openRecipe(' + r.id + ')">Как готовить</button>' +
+          '<button class="linkbtn" type="button" onclick="openRate(' + r.id + ')">Оценить</button>' +
+          (av ? '<span class="stars" style="margin-left:auto">' + starsHtml(av) + '</span>' : '') +
+        '</div>' +
       '</div></article>';
   }).join('');
 }
@@ -257,6 +305,7 @@ function openRecipe(id){
   const r = RECIPES.find(function(x){ return x.id === id; });
   $('rmTitle').textContent = r.name;
   $('rmBody').innerHTML =
+    (r.img ? '<img src="' + r.img + '" alt="' + esc(r.name) + '" />' : '') +
     '<div class="kb"><span>' + r.kcal + ' ккал</span><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span>' + r.time + ' мин</span></div>' +
     '<div><b style="font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Надо купить</b>' +
       '<div class="kb" style="margin-top:8px">' + r.ing.map(function(i){ return '<span>' + esc(i) + '</span>'; }).join('') + '</div></div>' +
@@ -323,11 +372,13 @@ function buildDay(){
     mult[cand[0]] += dir;
   }
   const sc = function(v, k){ return Math.round(v * mult[k]); };
-  $('daySlots').innerHTML = keys.map(function(k){
+  $('daySlots').innerHTML = keys.map(function(k, idx){
     const r = slots[k];
-    return '<div class="slot"><i>' + MEAL_LABEL[k] + '</i><b>' + esc(r.name) + '</b>' +
+    return '<div class="slot" style="--d:' + (idx * 0.06) + 's">' +
+      '<div class="slot-photo">' + foodThumb(r) + '</div>' +
+      '<div class="slot-body"><i>' + MEAL_LABEL[k] + '</i><b>' + esc(r.name) + '</b>' +
       '<em>' + portion(mult[k]) + sc(r.kcal, k) + ' ккал · ' + r.time + ' мин</em>' +
-      '<div style="margin-top:10px"><button class="linkbtn" type="button" onclick="openRecipe(' + r.id + ')">Рецепт →</button></div></div>';
+      '<div style="margin-top:10px"><button class="linkbtn" type="button" onclick="openRecipe(' + r.id + ')">Рецепт →</button></div></div></div>';
   }).join('');
   const tot = keys.reduce(function(a, k){
     const r = slots[k];
