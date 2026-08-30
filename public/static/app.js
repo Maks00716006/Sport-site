@@ -217,18 +217,33 @@ function calcNorm(){
   const sex = segGet('nSex'), goal = segGet('nGoal');
   const age = +$('nAge').value || 20, h = +$('nHeight').value || 175;
   const w = +$('nWeight').value || 75, act = parseFloat($('nAct').value) || 1.55;
+
+  // Основной обмен — формула Миффлина-Сан Жеора (Mifflin-St Jeor, 1990),
+  // признана самой точной для BMR в клинических рекомендациях (Academy of Nutrition and Dietetics).
   const bmr = 10*w + 6.25*h - 5*age + (sex === 'm' ? 5 : -161);
   const tdee = bmr * act;
+
+  // Дефицит/избыток калорий — умеренный темп (ISSN Position Stand по body composition):
+  // сушка -18% (безопасный дефицит без потери мышц), масса +12% (чистый набор, минимум жира).
   const factor = goal === 'cut' ? 0.82 : (goal === 'mass' ? 1.12 : 1);
   const kcal = Math.round(tdee * factor / 10) * 10;
+
+  // Белок — г/кг веса по целям (ISSN Position Stand: Protein and Exercise, 2017):
+  // сушка 2.2 г/кг (максимум сохранения мышц в дефиците), масса 2.0, поддержание 1.8 — всё в пределах 1.6–2.2 г/кг,
+  // рекомендованных для тренирующихся.
   const p = Math.round(w * (goal === 'cut' ? 2.2 : goal === 'mass' ? 2.0 : 1.8));
-  const f = Math.round(w * (goal === 'cut' ? 0.8 : 0.9));
+  // Жиры — не ниже 0.6 г/кг (минимум для гормонального здоровья), обычно 0.8-0.9 г/кг.
+  const f = Math.max(Math.round(w*0.6), Math.round(w * (goal === 'cut' ? 0.8 : 0.9)));
+  // Углеводы — остаток калорий после белков и жиров (4 ккал/г белки и углеводы, 9 ккал/г жиры),
+  // с защитным минимумом 50 г для работы мозга и ЦНС.
   const c = Math.max(50, Math.round((kcal - p*4 - f*9) / 4));
-  const prevKcal = norm.kcal;
+  const prevKcal = norm.kcal, prevP = norm.p, prevF = norm.f, prevC = norm.c;
   norm = { kcal:kcal, p:p, f:f, c:c };
 
-  animateNum($('outKcal'), prevKcal || kcal, kcal);
-  $('outP').textContent = p + ' г'; $('outF').textContent = f + ' г'; $('outC').textContent = c + ' г';
+  animateNum($('outKcal'), prevKcal || kcal, kcal, '', 700);
+  animateNum($('outP'), prevP || p, p, ' г', 700);
+  animateNum($('outF'), prevF || f, f, ' г', 700);
+  animateNum($('outC'), prevC || c, c, ' г', 700);
   pulse($('macroP')); pulse($('macroF')); pulse($('macroC'));
   $('outNote').textContent = goal === 'cut' ? 'Сушка: минус 18% от расхода, белок высокий — мышцы остаются.'
     : goal === 'mass' ? 'Масса: плюс 12% к расходу — рост без лишнего жира.'
@@ -415,7 +430,6 @@ function buildDay(){
     '<div class="kpi ' + (Math.abs(diff) <= 120 ? 'good' : '') + '"><b>' + (diff >= 0 ? '+' : '') + diff + '</b><span>к норме ' + norm.kcal + '</span></div>';
 }
 $('dayGo').onclick = buildDay;
-$('dayGo2').onclick = buildDay;
 
 /* ================= МОЙ ВЕС ================= */
 function sortedW(){
