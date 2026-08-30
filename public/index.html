@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ФОРМА — питание и тренировки</title>
+<title>WSPORT — питание и тренировки</title>
 <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
@@ -120,7 +120,7 @@
 
     <!-- step 2: onboarding -->
     <div class="authcard" id="authStep2" style="display:none">
-      <div class="brand"><span class="dot"></span> ФОРМА</div>
+      <div class="brand"><span class="dot"></span> WSPORT</div>
       <h2>Параметры для расчёта</h2>
       <p class="sub">Пять полей — и сайт сразу посчитает твою норму КБЖУ.</p>
       <div class="form">
@@ -165,7 +165,7 @@
 <!-- ============ APP ============ -->
 <div class="shell" id="app" style="display:none">
   <aside class="side">
-    <div class="brand"><span class="dot"></span> ФОРМА</div>
+    <div class="brand"><span class="dot"></span> WSPORT</div>
     <nav class="nav" id="nav"></nav>
     <div class="sidefoot">
       <div class="me">
@@ -178,7 +178,7 @@
 
   <main class="main">
     <div class="mtop">
-      <div class="brand"><span class="dot"></span> ФОРМА</div>
+      <div class="brand"><span class="dot"></span> WSPORT</div>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:13px;color:var(--muted)" id="meNameM">Максим</span>
         <button class="btn sm ghost" type="button" id="logoutM">Выйти</button>
@@ -194,6 +194,16 @@
       <div class="grid2">
         <div class="card">
           <div class="form" style="margin-top:0">
+            <div class="field">
+              <label>Как считать норму</label>
+              <div class="seg" id="nMode">
+                <button type="button" data-v="auto" class="on">Рассчитать по параметрам</button>
+                <button type="button" data-v="manual">Указать свои цифры</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form" id="normAutoFields" style="margin-top:14px">
             <div class="field">
               <label>Пол</label>
               <div class="seg" id="nSex">
@@ -226,8 +236,20 @@
                 <button type="button" data-v="mass">Масса</button>
               </div>
             </div>
-            <button class="btn wide" type="button" id="nSave">Сохранить в профиль</button>
           </div>
+
+          <div class="form" id="normManualFields" style="margin-top:14px;display:none">
+            <p class="hint">Впиши свои калории и БЖУ сам — если цифры окажутся нереальными, мы аккуратно подправим их до безопасных значений и объясним почему.</p>
+            <div class="field"><label for="mKcal">Калории, ккал в день</label><input id="mKcal" type="number" min="800" max="6000" step="10" value="2600" /></div>
+            <div class="row2">
+              <div class="field"><label for="mProt">Белки, г</label><input id="mProt" type="number" min="20" max="400" value="150" /></div>
+              <div class="field"><label for="mFat">Жиры, г</label><input id="mFat" type="number" min="20" max="300" value="70" /></div>
+            </div>
+            <div class="field"><label for="mCarb">Углеводы, г — досчитываются сами по остатку калорий</label><input id="mCarb" type="number" value="300" disabled /></div>
+            <p class="err" id="mErr"></p>
+          </div>
+
+          <button class="btn wide" type="button" id="nSave" style="margin-top:14px">Сохранить в профиль</button>
         </div>
 
         <div class="card" id="normCard">

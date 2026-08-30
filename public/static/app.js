@@ -69,6 +69,7 @@ $('authGo').onclick = function(){
   if(!u){ err.textContent = 'Такого аккаунта нет. Нажми «Создать аккаунт».'; return; }
   if(u.pass !== pass){ err.textContent = 'Неверный пароль.'; return; }
   enter(mail);
+  toast('Успешный вход!');
 };
 $('aPass').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGo').click(); });
 $('aMail').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGo').click(); });
@@ -104,7 +105,7 @@ $('onbGo').onclick = function(){
   };
   writeUsers(USERS);
   enter(p.mail);
-  toast('Аккаунт создан, брат');
+  toast('Успешная регистрация!');
 };
 
 function enter(key){
@@ -206,14 +207,29 @@ function pulse(el){
   el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
 }
 
+let normMode = 'auto';
+function clampNum(v, min, max){ return Math.min(max, Math.max(min, v)); }
+
 function fillNorm(){
   const p = ME.profile;
   segSet('nSex', p.sex); segSet('nGoal', p.goal);
   $('nAge').value = p.age; $('nHeight').value = p.height;
   $('nWeight').value = p.weight; $('nAct').value = p.act;
-  calcNorm();
+
+  normMode = p.normMode === 'manual' ? 'manual' : 'auto';
+  segSet('nMode', normMode);
+  $('normAutoFields').style.display = normMode === 'manual' ? 'none' : '';
+  $('normManualFields').style.display = normMode === 'manual' ? '' : 'none';
+  if(p.manualNorm){
+    $('mKcal').value = p.manualNorm.kcal;
+    $('mProt').value = p.manualNorm.p;
+    $('mFat').value = p.manualNorm.f;
+  }
+  recalcNorm();
 }
-function calcNorm(){
+
+/* считает автоматическую норму по антропометрии — научный расчёт */
+function calcAutoNorm(){
   const sex = segGet('nSex'), goal = segGet('nGoal');
   const age = +$('nAge').value || 20, h = +$('nHeight').value || 175;
   const w = +$('nWeight').value || 75, act = parseFloat($('nAct').value) || 1.55;
@@ -237,6 +253,66 @@ function calcNorm(){
   // Углеводы — остаток калорий после белков и жиров (4 ккал/г белки и углеводы, 9 ккал/г жиры),
   // с защитным минимумом 50 г для работы мозга и ЦНС.
   const c = Math.max(50, Math.round((kcal - p*4 - f*9) / 4));
+
+  const note = goal === 'cut' ? 'Сушка: минус 18% от расхода, белок высокий — мышцы остаются.'
+    : goal === 'mass' ? 'Масса: плюс 12% к расходу — рост без лишнего жира.'
+    : 'Форма: едим ровно столько, сколько тратим.';
+  const bmrText = 'Основной обмен ' + Math.round(bmr) + ' ккал · расход с активностью ' + Math.round(tdee) + ' ккал';
+  return { kcal:kcal, p:p, f:f, c:c, note:note, bmrText:bmrText };
+}
+
+/* проверяет ручной ввод КБЖУ и мягко подгоняет его к безопасным/адекватным границам,
+   объясняя пользователю, что и почему было скорректировано */
+function validateManualNorm(){
+  const msgs = [];
+  let kcal = Math.round(+$('mKcal').value);
+  let p = Math.round(+$('mProt').value);
+  let f = Math.round(+$('mFat').value);
+  const w = (ME && ME.profile && ME.profile.weight) ? ME.profile.weight : null;
+
+  if(!kcal || isNaN(kcal)) kcal = 2600;
+  const kcalClamped = clampNum(kcal, 800, 6000);
+  if(kcalClamped !== kcal) msgs.push('Калории скорректированы до диапазона 800–6000 ккал — это безопасные границы для взрослого человека.');
+  kcal = kcalClamped;
+
+  if(!p || isNaN(p)) p = 150;
+  let pClamped = clampNum(p, 20, 400);
+  if(pClamped !== p) msgs.push('Белки скорректированы до диапазона 20–400 г.');
+  p = pClamped;
+
+  if(!f || isNaN(f)) f = 70;
+  let fClamped = clampNum(f, 20, 300);
+  if(fClamped !== f) msgs.push('Жиры скорректированы до диапазона 20–300 г.');
+  f = fClamped;
+
+  // если известен вес — проверяем г/кг (ISSN: белок редко нужен выше 3 г/кг, жиры выше 2 г/кг избыточны)
+  if(w){
+    const pPerKg = p / w, fPerKg = f / w;
+    if(pPerKg > 3.2){ p = Math.round(w * 3.0); msgs.push('Белка на твой вес указано слишком много (> 3.2 г/кг) — снизили до разумных 3 г/кг.'); }
+    if(fPerKg > 2.5){ f = Math.round(w * 2.0); msgs.push('Жиров на твой вес указано слишком много — снизили до 2 г/кг.'); }
+  }
+
+  // белки+жиры не должны «съедать» больше 85% калорий — иначе на углеводы ничего не остаётся
+  const pfKcal = p*4 + f*9;
+  if(pfKcal > kcal * 0.85){
+    const scale = (kcal * 0.85) / pfKcal;
+    p = Math.max(20, Math.round(p * scale));
+    f = Math.max(20, Math.round(f * scale));
+    msgs.push('Белки и жиры уменьшены — при таких цифрах на углеводы не оставалось калорий.');
+  }
+
+  const c = Math.max(50, Math.round((kcal - p*4 - f*9) / 4));
+
+  $('mKcal').value = kcal; $('mProt').value = p; $('mFat').value = f; $('mCarb').value = c;
+  $('mErr').textContent = msgs.join(' ');
+  return { kcal:kcal, p:p, f:f, c:c,
+    note: msgs.length ? 'Свои цифры КБЖУ — часть значений подправлена, чтобы всё было адекватно.' : 'Свои цифры КБЖУ — заданы вручную.',
+    bmrText: '' };
+}
+
+/* отображает итоговые числа независимо от источника (авторасчёт или ручной ввод) */
+function renderNorm(r){
+  const kcal = r.kcal, p = r.p, f = r.f, c = r.c;
   const prevKcal = norm.kcal, prevP = norm.p, prevF = norm.f, prevC = norm.c;
   norm = { kcal:kcal, p:p, f:f, c:c };
 
@@ -245,10 +321,8 @@ function calcNorm(){
   animateNum($('outF'), prevF || f, f, ' г', 700);
   animateNum($('outC'), prevC || c, c, ' г', 700);
   pulse($('macroP')); pulse($('macroF')); pulse($('macroC'));
-  $('outNote').textContent = goal === 'cut' ? 'Сушка: минус 18% от расхода, белок высокий — мышцы остаются.'
-    : goal === 'mass' ? 'Масса: плюс 12% к расходу — рост без лишнего жира.'
-    : 'Форма: едим ровно столько, сколько тратим.';
-  $('outBmr').textContent = 'Основной обмен ' + Math.round(bmr) + ' ккал · расход с активностью ' + Math.round(tdee) + ' ккал';
+  $('outNote').textContent = r.note;
+  $('outBmr').textContent = r.bmrText;
 
   const kp = p*4, kf = f*9, kc = c*4, tot = kp + kf + kc;
   if(!normBarBuilt){
@@ -271,12 +345,30 @@ function calcNorm(){
   $('mDin').textContent = Math.round(kcal*0.25) + ' ккал';
   $('mSnack').textContent = Math.round(kcal*0.15) + ' ккал';
 }
-segInit('nSex', calcNorm); segInit('nGoal', calcNorm);
-['nAge','nHeight','nWeight','nAct'].forEach(function(id){ $(id).addEventListener('input', calcNorm); });
+
+function recalcNorm(){
+  if(normMode === 'manual') renderNorm(validateManualNorm());
+  else renderNorm(calcAutoNorm());
+}
+
+segInit('nSex', recalcNorm); segInit('nGoal', recalcNorm);
+['nAge','nHeight','nWeight','nAct'].forEach(function(id){ $(id).addEventListener('input', recalcNorm); });
+['mKcal','mProt','mFat'].forEach(function(id){ $(id).addEventListener('input', recalcNorm); });
+segInit('nMode', function(v){
+  normMode = v;
+  $('normAutoFields').style.display = v === 'manual' ? 'none' : '';
+  $('normManualFields').style.display = v === 'manual' ? '' : 'none';
+  recalcNorm();
+});
 $('nSave').onclick = function(){
   ME.profile.sex = segGet('nSex'); ME.profile.goal = segGet('nGoal');
   ME.profile.age = +$('nAge').value; ME.profile.height = +$('nHeight').value;
   ME.profile.weight = +$('nWeight').value; ME.profile.act = $('nAct').value;
+  ME.profile.normMode = normMode;
+  if(normMode === 'manual'){
+    const r = validateManualNorm();
+    ME.profile.manualNorm = { kcal:r.kcal, p:r.p, f:r.f };
+  }
   save(); toast('Сохранил в профиль');
 };
 
