@@ -752,9 +752,17 @@ function barcodeNotFound(code, offline){
    Чтобы добавить другого провайдера (Gemini, Claude и т. п.) — допиши функцию в VisionAI.providers. */
 const VisionAI = {
   key:'wsport-vision-cfg',
-  cfg: function(){ try { return JSON.parse(localStorage.getItem(this.key)) || { provider:'openai', apiKey:'', model:'gpt-4o-mini', endpoint:'' }; } catch(e){ return { provider:'openai', apiKey:'', model:'gpt-4o-mini', endpoint:'' }; } },
+  site: function(){ return !!(window.siteAI && window.siteAI.ready()); },
+  cfg: function(){
+    const def = { provider:this.site() ? 'site' : 'openai', apiKey:'', model:'gpt-4o-mini', endpoint:'' };
+    let c; try { c = JSON.parse(localStorage.getItem(this.key)) || def; } catch(e){ c = def; }
+    // у сайта есть свой бесплатный ИИ — используем его, пока человек сам не вписал ключ/сервер
+    if(this.site() && !c.explicit && ((c.provider === 'openai' && !c.apiKey) || (c.provider === 'proxy' && !c.endpoint))) c.provider = 'site';
+    if(c.provider === 'site' && !this.site()) c.provider = 'openai';
+    return c;
+  },
   saveCfg: function(c){ try { localStorage.setItem(this.key, JSON.stringify(c)); } catch(e){} },
-  ready: function(){ const c = this.cfg(); return c.provider === 'proxy' ? !!c.endpoint : !!c.apiKey; },
+  ready: function(){ const c = this.cfg(); return c.provider === 'site' ? true : c.provider === 'proxy' ? !!c.endpoint : !!c.apiKey; },
   prompt: 'Ты нутрициолог. На фото еда. Определи каждое блюдо/продукт на тарелке, оцени вес порции в граммах по размеру посуды и приборов, ' +
     'и посчитай калории, белки, жиры, углеводы и сахар (s, граммы; сахар всего, включая натуральный) для этого веса по стандартным таблицам. Названия — на русском. ' +
     'Ответь ТОЛЬКО JSON без пояснений: {"dish":"общее название","items":[{"name":"...","grams":150,"kcal":0,"p":0,"f":0,"c":0,"s":0}],"confidence":0.0-1.0,"note":"короткое замечание, если оценка неточная"}. ' +
@@ -772,7 +780,24 @@ const VisionAI = {
       img.src = url;
     });
   },
+  parseJson: function(text){
+    const t = String(text || '').replace(/```(?:json)?/gi, '');
+    const i = t.indexOf('{'), j = t.lastIndexOf('}');
+    if(i < 0 || j <= i) throw new Error('ИИ ответил не в том формате — попробуй ещё раз.');
+    return JSON.parse(t.slice(i, j + 1));
+  },
   providers: {
+    // бесплатный ИИ сайта (ключ в static/config.js) — ничего настраивать не нужно
+    site: async function(dataUrl){
+      const r = await window.siteAI.fetch({ temperature:0.2,
+        messages:[ { role:'system', content:VisionAI.prompt },
+                   { role:'user', content:[ { type:'text', text:'Что на тарелке и сколько в этом КБЖУ и сахара? Ответь только JSON.' }, { type:'image_url', image_url:{ url:dataUrl } } ] } ] },
+        { models:(window.WSPORT_CONFIG && window.WSPORT_CONFIG.aiVisionModels) || undefined });
+      if(r.status === 402 || r.status === 429) throw new Error('ИИ сейчас занят или дневной лимит закончился — попробуй чуть позже.');
+      if(!r.ok) throw new Error('Сервис распознавания ответил ошибкой ' + r.status + '.');
+      const j = await r.json();
+      return VisionAI.parseJson(j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content);
+    },
     openai: async function(dataUrl, c){
       const r = await fetch('https://api.openai.com/v1/chat/completions', {
         method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + c.apiKey },
@@ -807,12 +832,13 @@ const VisionAI = {
 let aiFile = null, aiItems = [];
 function renderVisionCfg(){
   const c = VisionAI.cfg();
+  if($('aiProvSite')) $('aiProvSite').style.display = VisionAI.site() ? '' : 'none';
   segSet('aiProv', c.provider);
   $('aiKey').value = c.apiKey || ''; $('aiModel').value = c.model || 'gpt-4o-mini'; $('aiEndpoint').value = c.endpoint || '';
   $('aiKeyRow').style.display = c.provider === 'openai' ? '' : 'none';
   $('aiEpRow').style.display = c.provider === 'proxy' ? '' : 'none';
   $('aiCfg').classList.toggle('need', !VisionAI.ready());
-  $('aiCfgState').textContent = VisionAI.ready() ? (c.provider === 'openai' ? 'OpenAI · ' + (c.model || 'gpt-4o-mini') : 'свой сервер') : 'не настроено';
+  $('aiCfgState').textContent = VisionAI.ready() ? (c.provider === 'site' ? 'бесплатный ИИ сайта' : c.provider === 'openai' ? 'OpenAI · ' + (c.model || 'gpt-4o-mini') : 'свой сервер') : 'не настроено';
 }
 function aiPreview(file){
   aiFile = file; aiItems = [];
@@ -1077,7 +1103,7 @@ function diaryInit(){
     const tot = aiItems.reduce(function(t, y){ return { kcal:t.kcal + y.kcal, p:t.p + y.p, f:t.f + y.f, c:t.c + y.c, s:t.s + (y.s || 0) }; }, { kcal:0, p:0, f:0, c:0, s:0 });
     $('aiResult').querySelector('.ai-tot').innerHTML = 'Итого: <b>' + Math.round(tot.kcal) + ' ккал</b> · Б ' + r1(tot.p) + ' · Ж ' + r1(tot.f) + ' · У ' + r1(tot.c) + ' · Сахар ' + r1(tot.s);
   });
-  segInit('aiProv', function(v){ const c = VisionAI.cfg(); c.provider = v; VisionAI.saveCfg(c); renderVisionCfg(); });
+  segInit('aiProv', function(v){ const c = VisionAI.cfg(); c.provider = v; c.explicit = true; VisionAI.saveCfg(c); renderVisionCfg(); });
   $('aiSave').onclick = function(){
     const c = VisionAI.cfg();
     c.apiKey = $('aiKey').value.trim(); c.model = $('aiModel').value.trim() || 'gpt-4o-mini'; c.endpoint = $('aiEndpoint').value.trim();

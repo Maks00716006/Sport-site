@@ -32,7 +32,10 @@ const Chat = (function(){
     try { c = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch(e){}
     // режим задаёт только владелец сайта в static/config.js; по умолчанию — бесплатный Puter.
     // Старые настройки из браузера (например, «Свой сервер») больше не влияют — чат не может «сломаться».
-    let mode = (window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatProvider) || 'puter';
+    let mode = (window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatProvider) || 'auto';
+    const site = !!(window.siteAI && window.siteAI.ready());
+    if(mode === 'auto') mode = site ? 'open' : 'puter';            // есть ключ сайта — никаких окон и входов
+    if(mode === 'open' && !site) mode = 'puter';
     if(mode === 'server' && !endpoint()) mode = 'puter';
     if(mode === 'key' && !c.apiKey) mode = 'puter';
     return { mode:mode, endpoint:c.endpoint || '', apiKey:c.apiKey || '', model:c.model || '' };
@@ -46,7 +49,7 @@ const Chat = (function(){
     // на GitHub Pages сервера нет — нужен адрес воркера в config.js
     return /github\.io$/.test(location.hostname) || location.protocol === 'file:' ? '' : '/api/chat';
   }
-  function ready(){ const c = cfg(); return c.mode === 'puter' ? true : c.mode === 'key' ? !!c.apiKey : !!endpoint(); }
+  function ready(){ const c = cfg(); return c.mode === 'puter' || c.mode === 'open' ? true : c.mode === 'key' ? !!c.apiKey : !!endpoint(); }
 
   /* ---------- Puter.js (бесплатный режим) ---------- */
   let puterP = null, pendingText = '';
@@ -240,6 +243,12 @@ const Chat = (function(){
       let b = null; try { b = await res.json(); } catch(e){}
       throw { ui:errText(res.status, b) };
     }
+    if(/application\/json/.test(res.headers.get('content-type') || '')){   // сервис ответил целиком, без стрима
+      const j = await res.json();
+      const t = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      if(t) yield t;
+      return;
+    }
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
     for(;;){
@@ -247,12 +256,18 @@ const Chat = (function(){
       if(r.done) break;
       buf += dec.decode(r.value, { stream:true });
       let i;
+      buf = buf.replace(/\r\n/g, '\n');
       while((i = buf.indexOf('\n\n')) >= 0){
         const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
         const dataLine = chunk.split('\n').filter(function(l){ return l.indexOf('data:') === 0; }).map(function(l){ return l.slice(5).trim(); }).join('');
         if(!dataLine) continue;
         let ev; try { ev = JSON.parse(dataLine); } catch(e){ continue; }
-        if(ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') yield ev.delta.text;
+        if(ev.choices){                                            // OpenAI-совместимый формат (ИИ сайта)
+          const d = ev.choices[0] && (ev.choices[0].delta || ev.choices[0].message);
+          if(d && typeof d.content === 'string' && d.content) yield d.content;
+        }
+        else if(ev.error) throw { status:ev.error.code || 0, ui:errText(+ev.error.code || 0, ev) };
+        else if(ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') yield ev.delta.text;
         else if(ev.type === 'error') throw { ui:(ev.error && ev.error.type === 'overloaded_error') ? 'ИИ сейчас перегружен — попробуй через минуту.' : ((ev.error && ev.error.message) || 'Ошибка во время ответа.') };
       }
     }
@@ -267,6 +282,10 @@ const Chat = (function(){
   }
   async function request(messages, signal){
     const c = cfg();
+    if(c.mode === 'open'){
+      const p = await getPrompt();
+      return window.siteAI.fetch({ messages:[{ role:'system', content:p.SYSTEM_PROMPT }].concat(messages), stream:true, max_tokens:1500 }, { signal:signal });
+    }
     if(c.mode === 'key'){
       const p = await getPrompt();
       return fetch('https://api.anthropic.com/v1/messages', {
@@ -279,6 +298,12 @@ const Chat = (function(){
   }
   function errText(status, body){
     const m = body && (body.message || (body.error && body.error.message));
+    if(cfg().mode === 'open'){
+      if(status === 402 || status === 429) return 'ИИ сейчас занят или дневной бесплатный лимит закончился — попробуй чуть позже.';
+      if(status === 401 || status === 403) return 'ИИ сайта временно недоступен (проблема с ключом сайта). Напиши владельцу сайта.';
+      if(status >= 500) return 'ИИ сейчас перегружен — попробуй через минуту.';
+      return 'ИИ ответил ошибкой ' + status + ' — попробуй ещё раз.';
+    }
     if(status === 401) return 'Ключ API не подошёл — проверь его в настройках ⚙︎.';
     if(status === 404) return 'Сервер чата не найден. Задеплой worker/index.js на Cloudflare и укажи его адрес в static/config.js (или в ⚙︎).';
     if(status === 403) return 'Этому сайту нельзя обращаться к серверу чата (проверь ALLOWED_ORIGINS в wrangler.jsonc).';
