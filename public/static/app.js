@@ -551,7 +551,7 @@ function recipeCard(r, i){
       '<div class="rtop"><h3>' + esc(r.name) + '</h3></div>' +
       '<div class="rmeta">' + r.time + ' мин · ' + r.kind + ' · ' + r.meal.map(function(m){ return MEAL_LABEL[m]; }).join(', ') + '</div>' +
       '<div class="kb">' + (r.shake ? '<span class="pw">Протеин ' + r.powder + ' г</span>' : '') +
-        '<span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span>' +
+        '<span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span class="sg">Сахар ' + r.s + '</span>' +
         (r.shake ? '' : '<span>' + r.ing.length + ' ингредиентов</span>') + '</div>' +
       '<div class="rfoot">' +
         '<button class="btn sm ghost" type="button" onclick="openRecipe(' + r.id + ')">Как готовить</button>' +
@@ -595,7 +595,7 @@ function openRecipe(id){
   $('rmTitle').textContent = r.name;
   $('rmBody').innerHTML =
     (r.img ? '<img src="' + r.img + '" alt="' + esc(r.name) + '" />' : '') +
-    '<div class="kb">' + (r.shake ? '<span class="pw">Протеин без вкуса ' + r.powder + ' г</span>' : '') + '<span>' + r.kcal + ' ккал</span><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span>' + r.time + ' мин</span></div>' +
+    '<div class="kb">' + (r.shake ? '<span class="pw">Протеин без вкуса ' + r.powder + ' г</span>' : '') + '<span>' + r.kcal + ' ккал</span><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span class="sg">Сахар ' + r.s + ' г</span><span>' + r.time + ' мин</span></div>' +
     '<div><b style="font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">' + (r.shake ? 'Ингредиенты на 1 порцию' : 'Надо купить') + '</b>' +
       '<div class="kb" style="margin-top:8px">' + r.ing.map(function(i){ return '<span>' + esc(i) + '</span>'; }).join('') + '</div></div>' +
     '<div class="steps">' + r.steps.map(function(s, i){
@@ -635,8 +635,8 @@ $('rateSave').onclick = function(){
   ME.profile.cooked.push({ id:r.id, name:r.name, kcal:r.kcal, stars:rateStars, note:$('rateNote').value.trim(), date:$('rateDate').value || today() });
   if($('rateDiary').checked){
     const dd = dayData($('rateDate').value || today(), true);
-    dd.meals[segGet('rateMeal')].push({ id:uid(), name:r.name, brand:'рецепт WSPORT', grams:null, portion:'1 порция', kcal:r.kcal, p:r.p, f:r.f, c:r.c, src:'recipe',
-      base:{ id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, per100:false, src:'recipe' } });
+    dd.meals[segGet('rateMeal')].push({ id:uid(), name:r.name, brand:'рецепт WSPORT', grams:null, portion:'1 порция', kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, src:'recipe',
+      base:{ id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:false, src:'recipe' } });
     renderDiary();
   }
   save(); $('rateModal').classList.remove('on');
@@ -710,17 +710,19 @@ function buildDay(){
       '<div class="slot-photo">' + foodThumb(r) + '</div>' +
       '<div class="slot-body"><i>' + (x.extra ? 'Второй перекус' : MEAL_LABEL[x.k]) + '</i><b>' + esc(r.name) + '</b>' +
       '<em>' + portionLabel(x.m) + ' · <strong>' + sc(r.kcal, x.m) + ' ккал</strong> · ' + r.time + ' мин</em>' +
-      '<em class="slot-m">Б ' + sc(r.p, x.m) + ' · Ж ' + sc(r.f, x.m) + ' · У ' + sc(r.c, x.m) + '</em>' +
+      '<em class="slot-m">Б ' + sc(r.p, x.m) + ' · Ж ' + sc(r.f, x.m) + ' · У ' + sc(r.c, x.m) + ' · Сахар ' + sc(r.s, x.m) + '</em>' +
       '<div style="margin-top:10px"><button class="linkbtn" type="button" onclick="openRecipe(' + r.id + ')">Рецепт →</button></div></div></div>';
   }).join('');
   const tot = plan.reduce(function(a, x){
-    return { kcal:a.kcal + x.r.kcal * x.m, p:a.p + x.r.p * x.m, f:a.f + x.r.f * x.m, c:a.c + x.r.c * x.m };
-  }, { kcal:0, p:0, f:0, c:0 });
+    return { kcal:a.kcal + x.r.kcal * x.m, p:a.p + x.r.p * x.m, f:a.f + x.r.f * x.m, c:a.c + x.r.c * x.m, s:a.s + x.r.s * x.m };
+  }, { kcal:0, p:0, f:0, c:0, s:0 });
+  const sgMax = Math.round(target * 0.10 / 4);
   const kcal = Math.round(tot.kcal), diff = kcal - target, ok = Math.abs(diff) <= target * .03;
   $('dayTotal').innerHTML =
     '<div class="kpi"><b>' + kcal + '</b><span>ккал за день</span></div>' +
     '<div class="kpi ' + (tot.p >= norm.p * .85 ? 'good' : '') + '"><b>' + Math.round(tot.p) + ' <small>/ ' + norm.p + ' г</small></b><span>белки</span></div>' +
     '<div class="kpi"><b>' + Math.round(tot.f) + ' г</b><span>жиры</span></div>' +
+    '<div class="kpi sg' + (tot.s > sgMax ? ' warn' : '') + '" title="ВОЗ: добавленный сахар — не больше 10% калорий"><b>' + Math.round(tot.s) + ' <small>/ ' + sgMax + ' г</small></b><span>сахар</span></div>' +
     '<div class="kpi ' + (ok ? 'good' : '') + '"><b>' + (diff >= 0 ? '+' : '') + diff + '</b><span>к норме ' + target + '</span></div>';
   $('dayHint').textContent = ok
     ? 'Итого ' + kcal + ' ккал при норме ' + target + ' — разница ' + Math.abs(diff) + ' ккал (' + (Math.abs(diff) / target * 100).toFixed(1) + '%). Не нравится блюдо — жми «Собрать день» ещё раз.'
@@ -733,8 +735,8 @@ $('dayToDiary').onclick = function(){
   lastDay.forEach(function(x){
     const r = x.r;
     d.meals[x.k].push({ id:uid(), name:r.name, brand:'готовый день', grams:null, portion:portionLabel(x.m),
-      kcal:Math.round(r.kcal * x.m), p:r1(r.p * x.m), f:r1(r.f * x.m), c:r1(r.c * x.m), src:'recipe',
-      base:{ id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, per100:false, src:'recipe' } });
+      kcal:Math.round(r.kcal * x.m), p:r1(r.p * x.m), f:r1(r.f * x.m), c:r1(r.c * x.m), s:r1(r.s * x.m), src:'recipe',
+      base:{ id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:false, src:'recipe' } });
   });
   save(); renderDiary(); achCheck();
   toast('Меню записано в дневник на сегодня');

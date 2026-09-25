@@ -60,13 +60,13 @@ function dayData(date, create){
   return st[date];
 }
 function dayTotals(date){
-  const d = dayData(date), t = { kcal:0, p:0, f:0, c:0 };
+  const d = dayData(date), t = { kcal:0, p:0, f:0, c:0, s:0, sUnknown:0 };
   if(!d) return t;
-  MEALS.forEach(function(m){ (d.meals[m.id] || []).forEach(function(x){ t.kcal += x.kcal; t.p += x.p; t.f += x.f; t.c += x.c; }); });
+  MEALS.forEach(function(m){ (d.meals[m.id] || []).forEach(function(x){ t.kcal += x.kcal; t.p += x.p; t.f += x.f; t.c += x.c; if(x.s == null) t.sUnknown++; else t.s += x.s; }); });
   return t;
 }
 function mealTotals(d, meal){
-  return (d && d.meals[meal] || []).reduce(function(t, x){ return { kcal:t.kcal + x.kcal, p:t.p + x.p, f:t.f + x.f, c:t.c + x.c }; }, { kcal:0, p:0, f:0, c:0 });
+  return (d && d.meals[meal] || []).reduce(function(t, x){ return { kcal:t.kcal + x.kcal, p:t.p + x.p, f:t.f + x.f, c:t.c + x.c, s:t.s + (x.s || 0) }; }, { kcal:0, p:0, f:0, c:0, s:0 });
 }
 function hasFood(date){
   const d = dayData(date);
@@ -77,6 +77,10 @@ function loggedDays(){
   if(!ME || !ME.profile.diary) return [];
   return Object.keys(ME.profile.diary).filter(hasFood).sort();
 }
+/* сахар может быть неизвестен (старые записи, товар без данных) — тогда «—» */
+function sv(v){ return v == null || isNaN(v) ? '—' : r1(v); }
+/* ориентир по сахару: ВОЗ советует добавленного сахара не больше 10% калорий (≈ 4 ккал в грамме) */
+function sugarGuide(){ return Math.round((norm.kcal || 2000) * 0.10 / 4); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function r1(v){ return Math.round(v * 10) / 10; }
 
@@ -151,18 +155,23 @@ function renderSummary(){
   $('dLine2').innerHTML = left >= 0
     ? 'Осталось <b>' + left.toLocaleString('ru-RU') + ' ккал</b> до ' + goal.toLocaleString('ru-RU')
     : '<span class="over">Перебор на <b>' + (-left).toLocaleString('ru-RU') + ' ккал</b></span>';
-  const mac = [['p','Белки',norm.p,'#C9F45C'],['f','Жиры',norm.f,'#5FD08C'],['c','Углеводы',norm.c,'#4C8DFF']];
+  const mac = [['p','Белки',norm.p,'#C9F45C'],['f','Жиры',norm.f,'#5FD08C'],['c','Углеводы',norm.c,'#4C8DFF'],['s','Сахар',sugarGuide(),'#FF9AC1']];
   $('dMacros').innerHTML = mac.map(function(m){
     const v = Math.round(t[m[0]]), g = m[2] || 1, w = Math.min(100, v / g * 100);
-    return '<div class="dmac"><div class="dmac-h"><span>' + m[1] + '</span><b>' + v + ' <small>/ ' + g + ' г</small></b></div>' +
+    const sugar = m[0] === 's';
+    const note = sugar
+      ? (v <= g ? 'ориентир до ' + g + ' г' : 'выше ориентира на ' + (v - g) + ' г') + (t.sUnknown ? ' · без данных: ' + t.sUnknown : '')
+      : (v <= g ? 'осталось ' + (g - v) + ' г' : 'сверх нормы на ' + (v - g) + ' г');
+    return '<div class="dmac' + (sugar ? ' sugar' + (v > g ? ' over' : '') : '') + '"' + (sugar ? ' title="Сахар всего (включая фрукты и молоко). Ориентир ВОЗ: добавленного сахара — не больше 10% калорий."' : '') + '>' +
+      '<div class="dmac-h"><span>' + m[1] + '</span><b>' + v + ' <small>' + (sugar ? 'г' : '/ ' + g + ' г') + '</small></b></div>' +
       '<i class="dmac-bar"><em style="width:' + w + '%;background:' + m[3] + '"></em></i>' +
-      '<small class="dmac-l">' + (v <= g ? 'осталось ' + (g - v) + ' г' : 'сверх нормы на ' + (v - g) + ' г') + '</small></div>';
+      '<small class="dmac-l">' + note + '</small></div>';
   }).join('');
 }
 
 function foodLine(x){
   const amount = x.grams ? Math.round(x.grams) + ' г' : (x.portion || '1 порция');
-  return amount + ' · Б ' + r1(x.p) + ' · Ж ' + r1(x.f) + ' · У ' + r1(x.c);
+  return amount + ' · Б ' + r1(x.p) + ' · Ж ' + r1(x.f) + ' · У ' + r1(x.c) + ' · Сахар ' + sv(x.s);
 }
 function renderMeals(flash){
   const d = dayData(dDate);
@@ -172,7 +181,7 @@ function renderMeals(flash){
     return '<div class="dcard dmeal" data-meal="' + m.id + '">' +
       '<div class="dcard-h">' +
         '<span class="dcard-ic">' + m.icon + '</span>' +
-        '<div class="dcard-t"><b>' + m.label + '</b><span>' + (items.length ? Math.round(tt.kcal) + ' ккал · ' : '') + 'рекомендуем ~' + rec + ' ккал</span></div>' +
+        '<div class="dcard-t"><b>' + m.label + '</b><span>' + (items.length ? Math.round(tt.kcal) + ' ккал · сахар ' + Math.round(tt.s) + ' г · ' : '') + 'рекомендуем ~' + rec + ' ккал</span></div>' +
         '<button type="button" class="dplus" aria-label="Добавить в ' + m.label + '" onclick="openFoodModal(\'' + m.id + '\')">' + D_ICON.plus + '</button>' +
       '</div>' +
       (items.length ? '<div class="dlist">' + items.map(function(x){
@@ -286,7 +295,7 @@ function foodTab(t){
 function normTxt(s){ return String(s).toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9% ]/g, ' ').replace(/\s+/g, ' ').trim(); }
 function localSearch(q){
   const nq = normTxt(q);
-  const recipes = ALL_RECIPES.map(function(r){ return { id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, per100:false, src:'recipe', cat:r.shake ? 'Коктейль с сайта' : 'Рецепт с сайта' }; });
+  const recipes = ALL_RECIPES.map(function(r){ return { id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:false, src:'recipe', cat:r.shake ? 'Коктейль с сайта' : 'Рецепт с сайта' }; });
   const all = FOODS.concat(recipes);
   if(!nq){
     // без запроса — недавние продукты пользователя
@@ -323,7 +332,7 @@ function hl(name, q){
 function resultRow(x, q, key){
   return '<button type="button" class="fres" data-key="' + key + '">' +
     '<span class="fres-t"><b>' + hl(x.name, q) + '</b><small>' + (x.brand ? esc(x.brand) + ' · ' : '') + (x.recent ? 'недавнее · ' : '') + (x.cat ? esc(x.cat) + ' · ' : '') +
-    (x.per100 ? 'Б ' + x.p + ' · Ж ' + x.f + ' · У ' + x.c + ' на 100 г' : 'Б ' + x.p + ' · Ж ' + x.f + ' · У ' + x.c + ' на порцию') + '</small></span>' +
+    'Б ' + x.p + ' · Ж ' + x.f + ' · У ' + x.c + ' · Сахар ' + sv(x.s) + (x.per100 ? ' на 100 г' : ' на порцию') + '</small></span>' +
     '<span class="fres-k"><b>' + Math.round(x.kcal) + '</b><small>' + (x.per100 ? 'ккал/100 г' : 'ккал/порц.') + '</small></span></button>';
 }
 let fLocalList = [], fOffList = [];
@@ -354,6 +363,7 @@ const OFF = {
     const brand = (p.brands || '').split(',')[0].trim();
     const ru = (p.countries_tags || []).indexOf('en:russia') >= 0 || /^46\d/.test(p.code || '');
     return { id:'o' + p.code, code:p.code, name:name.trim(), brand:brand, kcal:r1(+kcal), p:r1(+(n.proteins_100g || 0)), f:r1(+(n.fat_100g || 0)), c:r1(+(n.carbohydrates_100g || 0)),
+      s:(n.sugars_100g != null && n.sugars_100g !== '') ? r1(+n.sugars_100g) : null,
       per100:true, portion:Math.round(+p.serving_quantity) || 100, qty:p.quantity || '', src:'off', ru:ru, cat:ru ? 'Россия' : '' };
   },
   byBarcode: async function(code){
@@ -410,8 +420,8 @@ function showPortion(item){
   $('fpName').textContent = item.name;
   $('fpBrand').textContent = [item.brand, item.qty, item.code ? 'штрих-код ' + item.code : ''].filter(Boolean).join(' · ');
   $('fpPer').textContent = item.per100
-    ? 'На 100 г: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c
-    : 'На 1 порцию: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c;
+    ? 'На 100 г: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s)
+    : 'На 1 порцию: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s);
   $('fpUnit').textContent = item.per100 ? 'г' : 'порц.';
   $('fpAmount').step = item.per100 ? 5 : 0.5;
   $('fpAmount').value = item.per100 ? (item.portion || 100) : 1;
@@ -424,13 +434,14 @@ function showPortion(item){
 function portionCalc(){
   const a = Math.max(0, parseFloat(String($('fpAmount').value).replace(',', '.')) || 0);
   const k = fPick.per100 ? a / 100 : a;
-  return { a:a, kcal:fPick.kcal * k, p:fPick.p * k, f:fPick.f * k, c:fPick.c * k };
+  return { a:a, kcal:fPick.kcal * k, p:fPick.p * k, f:fPick.f * k, c:fPick.c * k, s:fPick.s == null ? null : fPick.s * k };
 }
 function updatePortion(){
   if(!fPick) return;
   const r = portionCalc();
   $('fpRes').innerHTML = '<div class="fpk"><b>' + Math.round(r.kcal) + '</b><span>ккал</span></div>' +
-    '<div class="fpk"><b>' + r1(r.p) + '</b><span>белки</span></div><div class="fpk"><b>' + r1(r.f) + '</b><span>жиры</span></div><div class="fpk"><b>' + r1(r.c) + '</b><span>углеводы</span></div>';
+    '<div class="fpk"><b>' + r1(r.p) + '</b><span>белки</span></div><div class="fpk"><b>' + r1(r.f) + '</b><span>жиры</span></div><div class="fpk"><b>' + r1(r.c) + '</b><span>углеводы</span></div>' +
+    '<div class="fpk sugar"><b>' + sv(r.s) + '</b><span>сахар' + (r.s == null ? ' · нет данных' : '') + '</span></div>';
   $('fpChips').querySelectorAll('.chip').forEach(function(c){ c.classList.toggle('on', +c.dataset.v === r.a); });
   $('fpAdd').textContent = 'Добавить в «' + MEALS.find(function(m){ return m.id === fMealSel; }).label + '»';
 }
@@ -441,7 +452,7 @@ function addPicked(){
   addFoodToDiary(dDate, fMealSel, {
     name:fPick.name, brand:fPick.brand || '', grams:fPick.per100 ? r.a : null,
     portion:fPick.per100 ? null : (r.a === 1 ? '1 порция' : r.a + ' ' + plural(Math.ceil(r.a), 'порция', 'порции', 'порций')),
-    kcal:r1(r.kcal), p:r1(r.p), f:r1(r.f), c:r1(r.c), src:fPick.src, base:base
+    kcal:r1(r.kcal), p:r1(r.p), f:r1(r.f), c:r1(r.c), s:r.s == null ? null : r1(r.s), src:fPick.src, base:base
   });
   closeFoodModal();
 }
@@ -450,7 +461,8 @@ function addPicked(){
 function addManual(){
   const name = $('fmName').value.trim();
   const g = parseFloat($('fmGrams').value) || 0;
-  const vals = ['fmKcal','fmP','fmF','fmC'].map(function(id){ return Math.max(0, parseFloat(String($(id).value).replace(',', '.')) || 0); });
+  const vals = ['fmKcal','fmP','fmF','fmC','fmS'].map(function(id){ return Math.max(0, parseFloat(String($(id).value).replace(',', '.')) || 0); });
+  const sKnown = String($('fmS').value).trim() !== '';
   if(!name){ toast('Впиши название'); return; }
   if(!vals[0]){ toast('Укажи калории'); return; }
   const per100 = segGet('fmMode') === '100';
@@ -458,8 +470,8 @@ function addManual(){
   if(per100 && !g){ toast('Укажи вес порции'); return; }
   addFoodToDiary(dDate, fMealSel, {
     name:name, brand:$('fmCode').value ? 'штрих-код ' + $('fmCode').value : '', grams:g || null, portion:g ? null : '1 порция',
-    kcal:r1(vals[0] * k), p:r1(vals[1] * k), f:r1(vals[2] * k), c:r1(vals[3] * k), src:'manual',
-    base:per100 ? { id:'m' + uid(), name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], per100:true, portion:g || 100, src:'manual' } : null
+    kcal:r1(vals[0] * k), p:r1(vals[1] * k), f:r1(vals[2] * k), c:r1(vals[3] * k), s:sKnown ? r1(vals[4] * k) : null, src:'manual',
+    base:per100 ? { id:'m' + uid(), name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], s:sKnown ? vals[4] : null, per100:true, portion:g || 100, src:'manual' } : null
   });
   closeFoodModal();
 }
@@ -744,8 +756,8 @@ const VisionAI = {
   saveCfg: function(c){ try { localStorage.setItem(this.key, JSON.stringify(c)); } catch(e){} },
   ready: function(){ const c = this.cfg(); return c.provider === 'proxy' ? !!c.endpoint : !!c.apiKey; },
   prompt: 'Ты нутрициолог. На фото еда. Определи каждое блюдо/продукт на тарелке, оцени вес порции в граммах по размеру посуды и приборов, ' +
-    'и посчитай калории, белки, жиры, углеводы для этого веса по стандартным таблицам. Названия — на русском. ' +
-    'Ответь ТОЛЬКО JSON без пояснений: {"dish":"общее название","items":[{"name":"...","grams":150,"kcal":0,"p":0,"f":0,"c":0}],"confidence":0.0-1.0,"note":"короткое замечание, если оценка неточная"}. ' +
+    'и посчитай калории, белки, жиры, углеводы и сахар (s, граммы; сахар всего, включая натуральный) для этого веса по стандартным таблицам. Названия — на русском. ' +
+    'Ответь ТОЛЬКО JSON без пояснений: {"dish":"общее название","items":[{"name":"...","grams":150,"kcal":0,"p":0,"f":0,"c":0,"s":0}],"confidence":0.0-1.0,"note":"короткое замечание, если оценка неточная"}. ' +
     'Если на фото нет еды — {"dish":"","items":[],"confidence":0,"note":"На фото не видно еды"}.',
   downscale: function(file, max){
     return new Promise(function(ok, bad){
@@ -787,7 +799,7 @@ const VisionAI = {
     const dataUrl = await this.downscale(file, 1024);
     const out = await fn(dataUrl, c);
     out.items = (out.items || []).map(function(x){
-      return { name:String(x.name || 'Блюдо'), grams:Math.max(0, +x.grams || 0), kcal:Math.max(0, +x.kcal || 0), p:Math.max(0, +x.p || 0), f:Math.max(0, +x.f || 0), c:Math.max(0, +x.c || 0) };
+      return { name:String(x.name || 'Блюдо'), grams:Math.max(0, +x.grams || 0), kcal:Math.max(0, +x.kcal || 0), p:Math.max(0, +x.p || 0), f:Math.max(0, +x.f || 0), c:Math.max(0, +x.c || 0), s:(x.s == null || x.s === '') ? null : Math.max(0, +x.s || 0) };
     });
     return out;
   }
@@ -819,22 +831,22 @@ async function aiRun(){
     const out = await VisionAI.analyze(aiFile);
     aiItems = out.items;
     if(!aiItems.length){ $('aiResult').innerHTML = '<div class="fhint warn">' + esc(out.note || 'Не удалось распознать еду. Сфоткай сверху при хорошем свете.') + '</div>'; return; }
-    aiItems.forEach(function(x){ x.k = x.grams ? { kcal:x.kcal / x.grams, p:x.p / x.grams, f:x.f / x.grams, c:x.c / x.grams } : null; });
+    aiItems.forEach(function(x){ x.k = x.grams ? { kcal:x.kcal / x.grams, p:x.p / x.grams, f:x.f / x.grams, c:x.c / x.grams, s:x.s == null ? null : x.s / x.grams } : null; });
     renderAiItems(out);
   } catch(e){
     $('aiResult').innerHTML = '<div class="fhint warn">' + esc(e.message === 'need-config' ? 'Нужен ключ API — открой настройки ниже.' : e.message === 'Failed to fetch' ? 'Нет связи с сервисом распознавания.' : e.message) + '</div>';
   } finally { $('aiDrop').classList.remove('scan'); $('aiGo').disabled = false; }
 }
 function renderAiItems(out){
-  const tot = aiItems.reduce(function(t, x){ return { kcal:t.kcal + x.kcal, p:t.p + x.p, f:t.f + x.f, c:t.c + x.c }; }, { kcal:0, p:0, f:0, c:0 });
+  const tot = aiItems.reduce(function(t, x){ return { kcal:t.kcal + x.kcal, p:t.p + x.p, f:t.f + x.f, c:t.c + x.c, s:t.s + (x.s || 0) }; }, { kcal:0, p:0, f:0, c:0, s:0 });
   $('aiResult').innerHTML =
     (out && out.dish ? '<div class="ai-dish"><b>' + esc(out.dish) + '</b>' + (out.confidence != null ? '<span>уверенность ' + Math.round(out.confidence * 100) + '%</span>' : '') + '</div>' : '') +
     aiItems.map(function(x, i){
       return '<div class="ai-row"><input class="ai-n" data-i="' + i + '" value="' + esc(x.name) + '" aria-label="Название" />' +
         '<label class="ai-g"><input type="number" min="0" step="5" data-i="' + i + '" value="' + Math.round(x.grams) + '" aria-label="Вес, г" /> г</label>' +
-        '<span class="ai-k">' + Math.round(x.kcal) + ' ккал<br><small>Б ' + r1(x.p) + ' Ж ' + r1(x.f) + ' У ' + r1(x.c) + '</small></span></div>';
+        '<span class="ai-k">' + Math.round(x.kcal) + ' ккал<br><small>Б ' + r1(x.p) + ' Ж ' + r1(x.f) + ' У ' + r1(x.c) + ' Сахар ' + sv(x.s) + '</small></span></div>';
     }).join('') +
-    '<div class="ai-tot">Итого: <b>' + Math.round(tot.kcal) + ' ккал</b> · Б ' + r1(tot.p) + ' · Ж ' + r1(tot.f) + ' · У ' + r1(tot.c) + '</div>' +
+    '<div class="ai-tot">Итого: <b>' + Math.round(tot.kcal) + ' ккал</b> · Б ' + r1(tot.p) + ' · Ж ' + r1(tot.f) + ' · У ' + r1(tot.c) + ' · Сахар ' + r1(tot.s) + '</div>' +
     (out && out.note ? '<div class="fhint">' + esc(out.note) + '</div>' : '') +
     '<button class="btn wide" type="button" id="aiAdd">Добавить в «' + MEALS.find(function(m){ return m.id === fMealSel; }).label + '»</button>';
 }
@@ -1028,7 +1040,7 @@ function diaryInit(){
     if(r){ const k = r.dataset.key; showPortion(k[0] === 'l' ? fLocalList[+k.slice(1)] : fOffList[+k.slice(1)]); return; }
     const c = e.target.closest('#fpChips .chip'); if(c){ $('fpAmount').value = c.dataset.v; updatePortion(); return; }
     if(e.target.closest('#aiAdd')){
-      aiItems.forEach(function(x){ addFoodToDiary(dDate, fMealSel, { name:x.name, brand:'распознано по фото', grams:x.grams || null, portion:x.grams ? null : '1 порция', kcal:r1(x.kcal), p:r1(x.p), f:r1(x.f), c:r1(x.c), src:'ai' }); });
+      aiItems.forEach(function(x){ addFoodToDiary(dDate, fMealSel, { name:x.name, brand:'распознано по фото', grams:x.grams || null, portion:x.grams ? null : '1 порция', kcal:r1(x.kcal), p:r1(x.p), f:r1(x.f), c:r1(x.c), s:x.s == null ? null : r1(x.s), src:'ai' }); });
       closeFoodModal();
     }
   });
@@ -1058,12 +1070,12 @@ function diaryInit(){
     const x = aiItems[i];
     if(e.target.classList.contains('ai-n')){ x.name = e.target.value; return; }
     const g = Math.max(0, +e.target.value || 0);
-    if(x.k){ x.kcal = x.k.kcal * g; x.p = x.k.p * g; x.f = x.k.f * g; x.c = x.k.c * g; }
+    if(x.k){ x.kcal = x.k.kcal * g; x.p = x.k.p * g; x.f = x.k.f * g; x.c = x.k.c * g; if(x.k.s != null) x.s = x.k.s * g; }
     x.grams = g;
     const k = e.target.closest('.ai-row').querySelector('.ai-k');
-    k.innerHTML = Math.round(x.kcal) + ' ккал<br><small>Б ' + r1(x.p) + ' Ж ' + r1(x.f) + ' У ' + r1(x.c) + '</small>';
-    const tot = aiItems.reduce(function(t, y){ return { kcal:t.kcal + y.kcal, p:t.p + y.p, f:t.f + y.f, c:t.c + y.c }; }, { kcal:0, p:0, f:0, c:0 });
-    $('aiResult').querySelector('.ai-tot').innerHTML = 'Итого: <b>' + Math.round(tot.kcal) + ' ккал</b> · Б ' + r1(tot.p) + ' · Ж ' + r1(tot.f) + ' · У ' + r1(tot.c);
+    k.innerHTML = Math.round(x.kcal) + ' ккал<br><small>Б ' + r1(x.p) + ' Ж ' + r1(x.f) + ' У ' + r1(x.c) + ' Сахар ' + sv(x.s) + '</small>';
+    const tot = aiItems.reduce(function(t, y){ return { kcal:t.kcal + y.kcal, p:t.p + y.p, f:t.f + y.f, c:t.c + y.c, s:t.s + (y.s || 0) }; }, { kcal:0, p:0, f:0, c:0, s:0 });
+    $('aiResult').querySelector('.ai-tot').innerHTML = 'Итого: <b>' + Math.round(tot.kcal) + ' ккал</b> · Б ' + r1(tot.p) + ' · Ж ' + r1(tot.f) + ' · У ' + r1(tot.c) + ' · Сахар ' + r1(tot.s);
   });
   segInit('aiProv', function(v){ const c = VisionAI.cfg(); c.provider = v; VisionAI.saveCfg(c); renderVisionCfg(); });
   $('aiSave').onclick = function(){

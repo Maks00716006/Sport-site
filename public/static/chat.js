@@ -30,14 +30,16 @@ const Chat = (function(){
   function cfg(){
     let c = {};
     try { c = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch(e){}
-    const def = (window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatProvider) || 'puter';
-    let mode = c.mode || def;
-    if(mode === 'server' && !c.endpoint && !(window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatEndpoint) && /github\.io$/.test(location.hostname)) mode = 'puter';
+    // режим задаёт только владелец сайта в static/config.js; по умолчанию — бесплатный Puter.
+    // Старые настройки из браузера (например, «Свой сервер») больше не влияют — чат не может «сломаться».
+    let mode = (window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatProvider) || 'puter';
+    if(mode === 'server' && !endpoint()) mode = 'puter';
+    if(mode === 'key' && !c.apiKey) mode = 'puter';
     return { mode:mode, endpoint:c.endpoint || '', apiKey:c.apiKey || '', model:c.model || '' };
   }
   function saveCfg(c){ try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch(e){} }
   function endpoint(){
-    const c = cfg();
+    let c = {}; try { c = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch(e){}
     if(c.endpoint) return c.endpoint;
     const site = (window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatEndpoint) || '';
     if(site) return site;
@@ -156,7 +158,7 @@ const Chat = (function(){
 
   /* ---------- отправка и стриминг ---------- */
   async function getPrompt(){
-    if(!promptMod) promptMod = await import(new URL('static/chatPrompt.mjs', document.baseURI).href);
+    if(!promptMod) promptMod = await import(new URL('static/chatPrompt.mjs?v=' + (window.WSPORT_BUILD || '1'), document.baseURI).href);
     return promptMod;
   }
   /* единый поток текста для всех провайдеров */
@@ -240,7 +242,7 @@ const Chat = (function(){
   async function send(text){
     text = String(text || '').trim();
     if(!text || streaming) return;
-    if(!ready()){ showSetup(); openCfg(true); return; }
+    if(!ready()){ showSetup(); return; }
     if(cfg().mode === 'puter' && !puterSigned()){
       // вход нужен один раз; сообщение отправится сразу после входа
       pendingText = text;
@@ -325,6 +327,7 @@ const Chat = (function(){
   }
   function openCfg(force){
     const box = $('chatCfg'), c = cfg();
+    if(!box) return;
     const on = force === true ? true : box.hidden;
     box.hidden = !on;
     if(!on) return;
@@ -346,7 +349,7 @@ const Chat = (function(){
   function init(){
     $('chatFab').onclick = show;
     $('chatClose').onclick = hide;
-    $('chatGear').onclick = function(){ openCfg(); };
+    if($('chatGear')) $('chatGear').onclick = function(){ openCfg(); };
     $('chatClear').onclick = function(){
       if(streaming) streaming.abort();
       if(history.length && !confirm('Очистить переписку с ментором?')) return;
@@ -360,13 +363,15 @@ const Chat = (function(){
     });
     $('chatSugg').innerHTML = SUGGEST.map(function(s){ return '<button type="button" class="chip">' + s + '</button>'; }).join('');
     $('chatSugg').addEventListener('click', function(e){ const b = e.target.closest('.chip'); if(b) send(b.textContent); });
-    segInit('chatMode', cfgRows);
-    $('chatPuterOut').onclick = function(){ try { puter.auth.signOut(); } catch(e){} cfgRows('puter'); toast('Вышел из Puter'); };
-    $('chatCfgSave').onclick = function(){
-      saveCfg({ mode:segGet('chatMode'), endpoint:$('chatEp').value.trim(), apiKey:$('chatKey').value.trim(), model:$('chatModel').value.trim() });
-      $('chatCfg').hidden = true; renderAll(); setSendState(false);
-      toast(ready() ? 'Чат подключён' : 'Настройки сохранены');
-    };
+    if($('chatCfg')){
+      segInit('chatMode', cfgRows);
+      $('chatPuterOut').onclick = function(){ try { puter.auth.signOut(); } catch(e){} cfgRows('puter'); toast('Вышел из Puter'); };
+      $('chatCfgSave').onclick = function(){
+        saveCfg({ mode:segGet('chatMode'), endpoint:$('chatEp').value.trim(), apiKey:$('chatKey').value.trim(), model:$('chatModel').value.trim() });
+        $('chatCfg').hidden = true; renderAll(); setSendState(false);
+        toast(ready() ? 'Чат подключён' : 'Настройки сохранены');
+      };
+    }
     document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && open && !document.querySelector('.modal.on')) hide(); });
     if(window.visualViewport){ window.visualViewport.addEventListener('resize', syncViewport); window.visualViewport.addEventListener('scroll', syncViewport); }
   }

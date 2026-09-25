@@ -1253,3 +1253,33 @@
     .qt.qt-long .qt-q{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
     .qt.qt-long .qt-line b{display:block;margin-top:2px;}
   }
+
+  /* ================= САХАР (КБЖУ + Сахар) ================= */
+  .dmacros{grid-template-columns:repeat(4,minmax(0,1fr));}
+  .dmac.sugar .dmac-h b{color:#FFB3D1;}
+  .dmac.sugar.over .dmac-h b,.dmac.sugar.over .dmac-l{color:var(--red);}
+  .dmac.sugar.over .dmac-bar em{background:var(--red) !important;}
+  .kb span.sg{background:rgba(255,154,193,.08);border-color:rgba(255,154,193,.28);color:#FFC2DA;}
+  .fp-res{grid-template-columns:repeat(5,minmax(0,1fr));}
+  .fpk{padding:10px 6px;min-width:0;}
+  .fpk.sugar b{color:#FFB3D1;}
+  .fpk span{display:block;}
+  .kpi.sg b{color:#FFB3D1;}
+  .kpi.sg.warn b{color:#FFB547;}
+  .row4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+  #dayTotal{grid-template-columns:repeat(5,minmax(0,1fr));}
+  @media (max-width:900px){
+    #dayTotal{grid-template-columns:repeat(3,minmax(0,1fr));}
+  }
+  @media (max-width:700px){
+    .fp-res{grid-template-columns:repeat(4,minmax(0,1fr));}
+    .fp-res .fpk:first-child{grid-column:1 / -1;display:flex;align-items:baseline;justify-content:center;gap:8px;padding:8px;}
+    .fpk b{font-size:17px;}
+    .fpk span{font-size:10.5px;letter-spacing:0;text-transform:none;}
+  }
+  @media (max-width:560px){
+    .dmacros{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .row4{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+    #dayTotal{grid-template-columns:repeat(2,minmax(0,1fr));}
+    #dayTotal .kpi:last-child{grid-column:1 / -1;}
+  }

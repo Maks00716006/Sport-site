@@ -29,6 +29,13 @@ jobs:
         with:
           enablement: true
 
+      - name: Cache-busting (новая версия файлов при каждой публикации)
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i -E "s#(static/[A-Za-z0-9_.-]+\.(js|css))\?v=[A-Za-z0-9]+#\1?v=$V#g" public/index.html
+          sed -i -E "s#window\.WSPORT_BUILD = '[^']*'#window.WSPORT_BUILD = '$V'#" public/index.html
+          grep -o 'v=[A-Za-z0-9]*' public/index.html | sort | uniq -c
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:

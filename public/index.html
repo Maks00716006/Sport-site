@@ -4,7 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>WSPORT — питание и тренировки</title>
-<link rel="stylesheet" href="static/styles.css" />
+<script>window.WSPORT_BUILD = 'dev';</script>
+<link rel="stylesheet" href="static/styles.css?v=dev" />
 </head>
 <body>
 <!-- ============ AUTH ============ -->
@@ -444,24 +445,9 @@
     <header class="chat-h">
       <span class="chat-ava"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
       <div class="chat-t"><b id="chatTitle">ИИ-ментор</b><span><i class="chat-dot"></i><em id="chatStatus">онлайн</em> · поддержка и советы</span></div>
-      <button type="button" class="chat-ib" id="chatGear" aria-label="Настройки подключения"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <button type="button" class="chat-ib" id="chatClear" aria-label="Очистить переписку"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
       <button type="button" class="chat-ib" id="chatClose" aria-label="Закрыть чат"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
-    <div class="chat-cfg" id="chatCfg" hidden>
-      <div class="seg" id="chatMode"><button type="button" data-v="puter" class="on">Бесплатно</button><button type="button" data-v="server">Свой сервер</button><button type="button" data-v="key">Свой ключ</button></div>
-      <div id="chatPuterRow">
-        <p class="foot"><span id="chatPuterState"></span> Работает через Puter: без ключей и без оплаты со стороны сайта. Если у кого-то закончится бесплатный лимит Puter — это его аккаунт, не твой.</p>
-        <button class="btn sm ghost" type="button" id="chatPuterOut" style="display:none">Выйти из Puter</button>
-      </div>
-      <div id="chatEpRow" style="display:none"><div class="field"><label for="chatEp">Адрес /api/chat</label><input id="chatEp" type="url" autocomplete="off" /></div>
-        <p class="foot">Свой сервер (worker/index.js на Cloudflare) с ключом Anthropic. Обычно адрес берётся из static/config.js.</p></div>
-      <div id="chatKeyRow" style="display:none">
-        <div class="field"><label for="chatKey">Ключ Anthropic API</label><input id="chatKey" type="password" autocomplete="off" placeholder="sk-ant-…" /></div>
-        <p class="foot">Только для личного использования: ключ хранится в этом браузере.</p></div>
-      <div id="chatModelRow"><div class="field"><label for="chatModel">Модель (необязательно)</label><input id="chatModel" type="text" autocomplete="off" placeholder="по умолчанию" /></div></div>
-      <button class="btn sm" type="button" id="chatCfgSave">Сохранить</button>
-    </div>
     <div class="chat-log" id="chatLog" aria-live="polite"></div>
     <div class="chat-sugg chips" id="chatSugg"></div>
     <form class="chat-in" id="chatForm">
@@ -714,10 +700,11 @@
             <div class="field"><label for="fmGrams">Съел, г</label><input id="fmGrams" type="number" min="0" step="5" value="100" /></div>
             <div class="field"><label for="fmKcal">Калории</label><input id="fmKcal" type="number" min="0" step="1" /></div>
           </div>
-          <div class="row3">
-            <div class="field"><label for="fmP">Белки, г</label><input id="fmP" type="number" min="0" step="0.1" /></div>
-            <div class="field"><label for="fmF">Жиры, г</label><input id="fmF" type="number" min="0" step="0.1" /></div>
-            <div class="field"><label for="fmC">Углеводы, г</label><input id="fmC" type="number" min="0" step="0.1" /></div>
+          <div class="row4">
+            <div class="field"><label for="fmP">Белки, г</label><input id="fmP" type="number" min="0" step="0.1" inputmode="decimal" /></div>
+            <div class="field"><label for="fmF">Жиры, г</label><input id="fmF" type="number" min="0" step="0.1" inputmode="decimal" /></div>
+            <div class="field"><label for="fmC">Углеводы, г</label><input id="fmC" type="number" min="0" step="0.1" inputmode="decimal" /></div>
+            <div class="field"><label for="fmS">Сахар, г</label><input id="fmS" type="number" min="0" step="0.1" inputmode="decimal" placeholder="—" /></div>
           </div>
           <button class="btn wide" type="button" id="fmAdd">Добавить</button>
         </div>
@@ -779,16 +766,16 @@
 <div class="qt-root" id="qtRoot" aria-live="polite"></div>
 
 
-<script src="static/data.js"></script>
-<script src="static/achievements.js"></script>
-<script src="static/foods.js"></script>
-<script src="static/diary.js"></script>
-<script src="static/quotesData.js"></script>
-<script src="static/quotes.js"></script>
-<script src="static/config.js"></script>
-<script src="static/chat.js"></script>
-<script src="static/path-fix.js"></script>
-<script src="static/app.js"></script>
+<script src="static/data.js?v=dev"></script>
+<script src="static/achievements.js?v=dev"></script>
+<script src="static/foods.js?v=dev"></script>
+<script src="static/diary.js?v=dev"></script>
+<script src="static/quotesData.js?v=dev"></script>
+<script src="static/quotes.js?v=dev"></script>
+<script src="static/config.js?v=dev"></script>
+<script src="static/chat.js?v=dev"></script>
+<script src="static/path-fix.js?v=dev"></script>
+<script src="static/app.js?v=dev"></script>
 
 </body>
 </html>
