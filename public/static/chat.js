@@ -62,27 +62,73 @@ const Chat = (function(){
     return puterP;
   }
   function puterSigned(){ try { return !!(window.puter && puter.auth && puter.auth.isSignedIn()); } catch(e){ return false; } }
-  function showSignIn(){
-    const old = log().querySelector('.chat-signin'); if(old) old.remove();
-    const el = note('<b>Бесплатный ИИ-ментор</b><span>Чтобы начать, один раз войди в бесплатный аккаунт Puter — это сервис, через который работает ИИ. Платить ничего не нужно.</span>' +
-      '<button type="button" class="btn sm wide chat-signin-btn">Войти и начать</button>', 'signin');
-    el.classList.add('chat-signin');
-    el.querySelector('.chat-signin-btn').onclick = doSignIn;
+  function hasPuterToken(){ try { return !!(localStorage.getItem('puter.auth.token.v2') || localStorage.getItem('puter.auth.token')); } catch(e){ return false; } }
+  /* Заранее подгружаем Puter, пока человек ещё не подключён: тогда подключение
+     срабатывает прямо в момент нажатия «Войти»/«Отправить» (иначе браузер блокирует окно). */
+  function preload(){
+    if(cfg().mode !== 'puter' || puterSigned() || hasPuterToken()) return;   // уже подключён — грузим только при открытии чата
+    loadPuter().catch(function(){});
   }
-  async function doSignIn(){
+
+  /* ---------- подключение ИИ без ручной регистрации ----------
+     Puter сам создаёт гостевой аккаунт (attempt_temp_user_creation): на секунду открывается
+     его окно и закрывается. Это нужно один раз на устройство — дальше токен лежит в браузере.
+     Вызывать ТОЛЬКО синхронно из нажатия (вход на сайт, отправка сообщения). */
+  let linking = null;
+  function link(full){
+    if(puterSigned()) return Promise.resolve(true);
+    if(linking) return linking;
+    if(!(window.puter && window.puter.auth)) return null;          // скрипт Puter ещё не загрузился
+    let pr;
+    try { pr = window.puter.auth.signIn(full ? {} : { attempt_temp_user_creation:true }); }
+    catch(e){ pr = Promise.reject(e); }
+    linking = Promise.resolve(pr).then(function(){ linking = null; return true; }, function(e){ linking = null; throw e; });
+    return linking;
+  }
+  /* при входе/регистрации на сайте — тихо подключаем ИИ в том же нажатии */
+  function linkOnLogin(){
+    if(cfg().mode !== 'puter' || puterSigned()) return;
+    const pr = link();
+    if(pr) pr.catch(function(){});                                 // не вышло — подключим при первом сообщении
+  }
+  function linkErr(e){
+    const m = String((e && (e.error || e.code || e.message || (e.msg))) || e || '');
+    if(/popup_blocked|popup/i.test(m)) return { again:true, text:'Браузер не дал открыть окно подключения. Нажми кнопку ниже — это один раз.' };
+    if(/window_closed|closed/i.test(m)) return { again:true, text:'Окно подключения закрылось раньше времени. Нажми кнопку ниже — это займёт секунду.' };
+    if(/sign.?up|blocked|temp/i.test(m)) return { full:true, text:'В этой сети Puter не дал создать гостевой аккаунт автоматически. Нажми кнопку и войди или зарегистрируйся в Puter (бесплатно) — это один раз на этом устройстве.' };
+    return { again:true, text:'Не получилось подключить ИИ. Нажми кнопку ниже и попробуй ещё раз.' };
+  }
+  function connecting(on){
+    const old = log().querySelector('.chat-linking'); if(old) old.remove();
+    if(on){ const el = note('Подключаю ИИ-ментора… Это один раз на этом устройстве.'); el.classList.add('chat-linking'); toBottom(true); }
+  }
+  /* запасная карточка — только если автоматическое подключение не сработало */
+  function showSignIn(text, full){
+    const old = log().querySelector('.chat-signin'); if(old) old.remove();
+    const el = note('<b>Подключить ИИ-ментора</b><span>' + esc(text || 'Нажми кнопку — на секунду откроется окно и закроется. Регистрироваться не нужно.') + '</span>' +
+      '<button type="button" class="btn sm wide chat-signin-btn">' + (full ? 'Войти в Puter' : 'Подключить') + '</button>', 'signin');
+    el.classList.add('chat-signin');
+    el.querySelector('.chat-signin-btn').onclick = function(){ doSignIn(full); };
+    toBottom(true);
+  }
+  function doSignIn(full){
     const btn = log().querySelector('.chat-signin-btn');
-    try {
+    const pr = link(full);                                         // синхронно в нажатии
+    if(!pr){
       if(btn) busy(btn, true);
-      const p = window.puter && window.puter.auth ? window.puter : await loadPuter();
-      await p.auth.signIn();                     // всплывающее окно Puter (вызывается прямо из нажатия)
-      const card = log().querySelector('.chat-signin'); if(card) card.remove();
-      setSendState(false);
-      if(pendingText){ const t = pendingText; pendingText = ''; send(t); }
-      else $('chatQ').focus();
-    } catch(e){
-      if(btn) busy(btn, false);
-      note('Не получилось войти. Если окно входа не открылось — разреши всплывающие окна для сайта и нажми ещё раз.', 'err');
+      loadPuter().then(function(){ if(btn) busy(btn, false); showSignIn('ИИ загрузился — нажми ещё раз.'); })
+        .catch(function(){ if(btn) busy(btn, false); note('Не удалось загрузить ИИ (js.puter.com). Проверь интернет и попробуй ещё раз.', 'err'); });
+      return;
     }
+    if(btn) busy(btn, true);
+    pr.then(linked, function(e){ if(btn) busy(btn, false); const le = linkErr(e); showSignIn(le.text, le.full); });
+  }
+  function linked(){
+    const card = log().querySelector('.chat-signin'); if(card) card.remove();
+    connecting(false);
+    setSendState(false);
+    if(pendingText){ const t = pendingText; pendingText = ''; send(t); }
+    else if(open && window.matchMedia('(hover:hover)').matches) $('chatQ').focus();
   }
 
   /* ---------- история ---------- */
@@ -140,8 +186,9 @@ const Chat = (function(){
     $('chatSugg').style.display = history.length ? 'none' : '';
     if(!ready()) showSetup();
     else if(cfg().mode === 'puter'){
-      loadPuter().then(function(){ if(open && !puterSigned() && !log().querySelector('.chat-signin')) showSignIn(); setSendState(!!streaming); })
-        .catch(function(){ note('Не удалось загрузить бесплатный ИИ (js.puter.com). Проверь интернет или VPN и открой чат ещё раз.', 'err'); });
+      // подгружаем заранее — отправка первого сообщения сразу подключит ИИ, без карточек и регистрации
+      loadPuter().then(function(){ setSendState(!!streaming); })
+        .catch(function(){ note('Не удалось загрузить ИИ (js.puter.com). Проверь интернет и открой чат ещё раз.', 'err'); });
     }
     toBottom(true);
   }
@@ -244,9 +291,25 @@ const Chat = (function(){
     if(!text || streaming) return;
     if(!ready()){ showSetup(); return; }
     if(cfg().mode === 'puter' && !puterSigned()){
-      // вход нужен один раз; сообщение отправится сразу после входа
+      // один раз на устройство: Puter сам создаёт гостевой аккаунт, сообщение уйдёт сразу после этого
       pendingText = text;
-      if(window.puter && window.puter.auth){ doSignIn(); } else { showSignIn(); }
+      $('chatQ').value = ''; autosize();
+      if(hasPuterToken() && !(window.puter && window.puter.auth)){
+        // уже подключён раньше — просто ждём, пока догрузится скрипт
+        connecting(true);
+        loadPuter().then(function(){ connecting(false); if(puterSigned()) linked(); else showSignIn(); })
+          .catch(function(){ connecting(false); note('Не удалось загрузить ИИ (js.puter.com). Проверь интернет и попробуй ещё раз.', 'err'); });
+        return;
+      }
+      const pr = link();                                           // синхронно — пока идёт нажатие
+      if(!pr){
+        connecting(true);
+        loadPuter().then(function(){ connecting(false); showSignIn(); })
+          .catch(function(){ connecting(false); note('Не удалось загрузить ИИ (js.puter.com). Проверь интернет и попробуй ещё раз.', 'err'); });
+        return;
+      }
+      connecting(true);
+      pr.then(linked, function(e){ connecting(false); const le = linkErr(e); showSignIn(le.text, le.full); });
       return;
     }
     $('chatSugg').style.display = 'none';
@@ -282,7 +345,7 @@ const Chat = (function(){
         if(cfg().mode === 'puter' && !(e && e.ui)){
           const pe = puterErr(e);
           if(pe.funds) msg = 'Бесплатный лимит твоего аккаунта Puter закончился. Его можно пополнить на puter.com — или подожди, пока лимит обновится.';
-          else if(pe.auth){ msg = 'Нужно войти в Puter ещё раз.'; showSignIn(); }
+          else if(pe.auth){ msg = 'ИИ отключился — нажми «Подключить» и отправь сообщение ещё раз.'; showSignIn(); }
           else if(/load/.test(pe.text)) msg = 'Бесплатный ИИ не загрузился. Проверь интернет или VPN.';
         }
         note(esc(msg), 'err');
@@ -376,7 +439,7 @@ const Chat = (function(){
     if(window.visualViewport){ window.visualViewport.addEventListener('resize', syncViewport); window.visualViewport.addEventListener('scroll', syncViewport); }
   }
 
-  return { init:init, show:show, hide:hide, isOpen:function(){ return open; }, send:send, md:md, cfg:cfg, endpoint:endpoint,
+  return { init:init, show:show, hide:hide, preload:preload, linkOnLogin:linkOnLogin, isOpen:function(){ return open; }, send:send, md:md, cfg:cfg, endpoint:endpoint,
            reset:function(){ hide(); history = []; } };
 })();
 const SPARK = '<svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>';

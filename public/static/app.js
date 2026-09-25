@@ -141,6 +141,7 @@ $('authGo').onclick = async function(){
   USERS = readUsers();
   const u = USERS[mail];
   if(!u){ err.textContent = 'Такого аккаунта нет. Нажми «Создать аккаунт».'; return; }
+  Chat.linkOnLogin();          // в этом же нажатии тихо подключаем ИИ-ментора (один раз на устройство)
   busy(btn, true);
   const ok = await checkPass(u, pass);
   if(!ok){ busy(btn, false); err.textContent = 'Неверный пароль.'; return; }
@@ -176,6 +177,7 @@ $('aNameUp').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('a
 $('onbGo').onclick = async function(){
   const btn = this;
   const p = pending; if(!p || btn.disabled) return;
+  Chat.linkOnLogin();          // вместе с регистрацией на сайте подключаем ИИ-ментора — отдельно входить не нужно
   busy(btn, true);
   const acc = { name: p.name };
   await setPass(acc, p.pass);
@@ -1235,6 +1237,10 @@ setMode('login');
   const v = validSession();
   if(v) enter(v.k, v.remember);
   else clearSession();
+  // ИИ-ментор ещё не подключён на этом устройстве — заранее подгружаем Puter в фоне,
+  // чтобы подключение сработало прямо при нажатии «Войти» / «Отправить»
+  const lazy = window.requestIdleCallback || function(f){ return setTimeout(f, 1200); };
+  setTimeout(function(){ lazy(function(){ Chat.preload(); }, { timeout:4000 }); }, v ? 2500 : 800);
 })();
 
 /* ================= маскот-гантеля: медленно поворачивается к курсору ================= */
