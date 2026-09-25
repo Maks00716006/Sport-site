@@ -56,9 +56,9 @@ function segGet(id){ const b = $(id).querySelector('button.on'); return b ? b.da
 function segSet(id, v){
   $(id).querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === v); });
 }
-segInit('oSex'); segInit('oGoal');
+segInit('oSex'); segInit('oGoal'); segInit('rateMeal');
 
-let pending = null;
+let pending = null, diaryReady = false;
 $('authGo').onclick = function(){
   const mail = $('aMail').value.trim().toLowerCase();
   const pass = $('aPass').value;
@@ -126,6 +126,8 @@ function enter(key){
   const first = (ME.name || '?').trim().charAt(0).toUpperCase();
   $('ava').textContent = first; $('meName').textContent = ME.name; $('meMail').textContent = key;
   $('meNameM').textContent = ME.name;
+  if(!diaryReady){ diaryInit(); diaryReady = true; }
+  dDate = today();
   fillNorm(); renderAll(); go('norm');
   achInit(); updateFab();
   window.scrollTo(0, 0);
@@ -152,14 +154,14 @@ const IC = {
   day:'<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>',
   weight:'<svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/></svg>',
   gym:'<svg viewBox="0 0 24 24"><path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12"/></svg>',
-  history:'<svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg>'
+  history:'<svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg>',
+  diary:'<svg viewBox="0 0 24 24"><path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6z"/><path d="M6 3v18M10 8h5M10 12h5"/></svg>'
 };
 const TABS = [
   { id:'norm', label:'Норма КБЖУ', short:'КБЖУ' },
+  { id:'diary', label:'Дневник', short:'Дневник' },
   { id:'recipes', label:'Рецепты', short:'Рецепты' },
-  { id:'weight', label:'Мой вес', short:'Вес' },
-  { id:'gym', label:'Упражнения', short:'Зал' },
-  { id:'history', label:'История блюд', short:'История' }
+  { id:'gym', label:'Упражнения', short:'Зал' }
 ];
 $('nav').innerHTML = TABS.map(function(t){
   return '<button type="button" class="navbtn" data-go="' + t.id + '">' + IC[t.id] + '<span>' + t.label + '</span></button>';
@@ -171,7 +173,7 @@ $('tabbar').innerHTML = TABS.map(function(t){
 function go(id){
   document.querySelectorAll('.tab').forEach(function(s){ s.classList.toggle('on', s.id === 'tab-' + id); });
   document.querySelectorAll('[data-go]').forEach(function(b){ b.classList.toggle('on', b.dataset.go === id); });
-  if(id === 'weight') drawChart();
+  if(id === 'diary') renderDiary();
   window.scrollTo(0, 0);
 }
 
@@ -496,6 +498,8 @@ function openRate(id){
   const r = findR(id);
   const prev = ME.profile.cooked.filter(function(c){ return c.id === id; }).pop();
   rateStars = prev ? prev.stars : 5;
+  const h = new Date().getHours();
+  segSet('rateMeal', r.shake ? 'snack' : r.meal.indexOf(h < 11 ? 'breakfast' : h < 16 ? 'lunch' : h < 21 ? 'dinner' : 'snack') >= 0 ? (h < 11 ? 'breakfast' : h < 16 ? 'lunch' : h < 21 ? 'dinner' : 'snack') : r.meal[0]);
   $('rateTitle').textContent = r.name;
   $('rateDate').value = today();
   $('rateNote').value = '';
@@ -506,6 +510,12 @@ function openRate(id){
 $('rateSave').onclick = function(){
   const r = findR(rateId);
   ME.profile.cooked.push({ id:r.id, name:r.name, kcal:r.kcal, stars:rateStars, note:$('rateNote').value.trim(), date:$('rateDate').value || today() });
+  if($('rateDiary').checked){
+    const dd = dayData($('rateDate').value || today(), true);
+    dd.meals[segGet('rateMeal')].push({ id:uid(), name:r.name, brand:'рецепт WSPORT', grams:null, portion:'1 порция', kcal:r.kcal, p:r.p, f:r.f, c:r.c, src:'recipe',
+      base:{ id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, per100:false, src:'recipe' } });
+    renderDiary();
+  }
   save(); $('rateModal').classList.remove('on');
   renderRecipes(); renderHistory(); if($('viewShakes').style.display !== 'none') renderShakes();
   toast('Добавил в историю');
@@ -592,7 +602,7 @@ function renderWeight(){
 }
 function delW(date){
   ME.profile.weights = ME.profile.weights.filter(function(x){ return x.date !== date; });
-  save(); renderWeight(); toast('Запись удалена');
+  save(); renderWeight(); renderDiary(); if(profileOpen) renderProfile(); toast('Запись удалена');
 }
 $('wSave').onclick = function(){
   const kg = parseFloat($('wKg').value);
@@ -602,7 +612,7 @@ $('wSave').onclick = function(){
   ME.profile.weights.push({ date:date, kg:kg });
   ME.profile.weight = kg;
   save(); $('wKg').value = '';
-  fillNorm(); renderWeight(); toast('Записал: ' + kg.toFixed(1) + ' кг');
+  fillNorm(); renderWeight(); renderDiary(); if(profileOpen) renderProfile(); toast('Записал: ' + kg.toFixed(1) + ' кг');
   achCheck();
 };
 
@@ -655,7 +665,7 @@ function drawChart(){
   const step = Math.ceil(w.length / 6);
   for(let i = 0; i < w.length; i += step) g.fillText(fmtDate(w[i].date), X(i), cssH - 8);
 }
-window.addEventListener('resize', function(){ if($('tab-weight').classList.contains('on')) drawChart(); });
+window.addEventListener('resize', function(){ if(profileOpen && accOpen.weight) drawChart(); });
 
 /* ================= УПРАЖНЕНИЯ ================= */
 let fGroup = 'Все';
@@ -776,10 +786,10 @@ function delCooked(i){
   const item = c[i];
   const idx = ME.profile.cooked.indexOf(item);
   if(idx >= 0) ME.profile.cooked.splice(idx, 1);
-  save(); renderHistory(); renderRecipes(); toast('Удалил из истории'); achCheck(true);
+  save(); renderHistory(); renderRecipes(); if(profileOpen) renderProfile(); toast('Удалил из истории'); achCheck(true);
 }
 $('wipe').onclick = function(){
-  if(!confirm('Удалить весь прогресс: взвешивания и историю блюд?')) return;
+  if(!confirm('Удалить историю блюд и все взвешивания? Дневник питания останется.')) return;
   ME.profile.weights = []; ME.profile.cooked = [];
   save(); renderAll(); toast('Данные очищены'); achCheck(true);
 };
@@ -787,43 +797,26 @@ $('wipe').onclick = function(){
 
 /* ================= ПРОФИЛЬ ================= */
 
-/* Стрик записи еды.
-   Дневника питания на сайте пока нет, поэтому здесь демо-данные (isMock: true).
-   Когда появится модуль записи еды, достаточно вызвать
-     FoodStreak.setDays(['2026-09-20', '2026-09-21', ...])   // даты, когда была запись
-   — текущий/лучший стрик посчитаются сами, виджет и достижения обновятся. */
-const FoodStreak = (function(){
-  function iso(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
-  function shift(n){ const d = new Date(); d.setDate(d.getDate() - n); return iso(d); }
-  function calc(days){
+/* Стрик записи еды — считается по дневнику питания (дни, где есть хотя бы один продукт). */
+const FoodStreak = {
+  calc: function(days){
     const set = new Set(days);
     let current = 0;
-    for(let i = set.has(shift(0)) ? 0 : 1; set.has(shift(i)); i++) current++;
-    const sorted = Array.from(set).sort();
+    for(let i = set.has(addDays(today(), 0)) ? 0 : 1; set.has(addDays(today(), -i)); i++) current++;
     let best = 0, run = 0, prev = null;
-    sorted.forEach(function(d){
-      const t = new Date(d + 'T00:00:00').getTime();
-      run = (prev !== null && Math.round((t - prev) / 864e5) === 1) ? run + 1 : 1;
-      best = Math.max(best, run); prev = t;
+    days.slice().sort().forEach(function(d){
+      run = (prev && addDays(prev, 1) === d) ? run + 1 : 1;
+      best = Math.max(best, run); prev = d;
     });
     return { current: current, best: best };
+  },
+  get: function(){ const days = loggedDays(); return Object.assign({ days: days, isMock: false }, this.calc(days)); },
+  week: function(){   // последние 7 дней для виджета в профиле
+    const set = new Set(loggedDays()), out = [];
+    for(let i = 6; i >= 0; i--){ const ds = addDays(today(), -i); out.push({ d: parseDate(ds), on: set.has(ds) }); }
+    return out;
   }
-  // демо: записи за последние 4 дня + старая серия из 9 дней
-  const mockDays = [0,1,2,3].map(shift).concat([12,13,14,15,16,17,18,19,20].map(shift));
-  let state = Object.assign({ days: mockDays, isMock: true }, calc(mockDays));
-  return {
-    get: function(){ return state; },
-    week: function(){ // последние 7 дней, от старого к сегодняшнему
-      const set = new Set(state.days), out = [];
-      for(let i = 6; i >= 0; i--){ const d = new Date(); d.setDate(d.getDate() - i); out.push({ d: d, on: set.has(iso(d)) }); }
-      return out;
-    },
-    setDays: function(days){
-      state = Object.assign({ days: days.slice(), isMock: false }, calc(days));
-      renderStreak(); updateFab(); achCheck();
-    }
-  };
-})();
+};
 
 const KIND_STAT = { 'без огня':'k_nofire', 'микроволновка':'k_micro', '1 сковорода':'k_pan', 'духовка':'k_oven', 'кастрюля':'k_pot' };
 
@@ -914,6 +907,20 @@ function closeProfile(){
   $('pfab').focus({ preventScroll: true });
 }
 $('pfab').onclick = openProfile;
+
+/* сворачиваемые разделы профиля */
+const accOpen = { cooked:true, fav:true };
+document.querySelectorAll('.acc').forEach(function(sec){
+  const key = sec.dataset.acc, h = sec.querySelector('.acc-h');
+  if(accOpen[key]) sec.classList.add('open');
+  h.addEventListener('click', function(){
+    const open = !sec.classList.contains('open');
+    sec.classList.toggle('open', open);
+    h.setAttribute('aria-expanded', open);
+    accOpen[key] = open;
+    if(open && key === 'weight'){ drawChart(); setTimeout(drawChart, 320); }
+  });
+});
 $('pdClose').onclick = closeProfile;
 $('pdBack').onclick = closeProfile;
 document.addEventListener('keydown', function(e){
@@ -930,7 +937,7 @@ function renderStreak(){
     '<div class="stk-week">' + FoodStreak.week().map(function(x, i){
       return '<div class="stk-day' + (x.on ? ' on' : '') + (i === 6 ? ' today' : '') + '"><i>' + (x.on ? FIRE : '') + '</i><span>' + days[x.d.getDay()] + '</span></div>';
     }).join('') + '</div>' +
-    (fs.isMock ? '<p class="stk-note">Демо-данные: дневник питания скоро появится, и здесь будет твой настоящий стрик.</p>' : '');
+    '<button type="button" class="linkbtn stk-go" onclick="closeProfile();go(\'diary\')">' + (fs.current ? 'Открыть дневник →' : 'Записать еду в дневник →') + '</button>';
 }
 
 function miniCard(r, extra){
@@ -960,7 +967,6 @@ function renderProfile(){
   const last = {}, cnt = {};
   p.cooked.forEach(function(x){ cnt[x.id] = (cnt[x.id] || 0) + 1; if(!last[x.id] || x.date > last[x.id]) last[x.id] = x.date; });
   const cookedIds = Object.keys(last).map(Number).sort(function(a, b){ return last[a] < last[b] ? 1 : -1; });
-  $('pdCookedN').textContent = cookedIds.length;
   $('pdCooked').innerHTML = cookedIds.length ? cookedIds.map(function(id){
     const r = findR(id); if(!r) return '';
     return miniCard(r, cnt[id] + ' ' + plural(cnt[id], 'раз', 'раза', 'раз') + ' · ' + fmtDate(last[id]));
@@ -970,7 +976,6 @@ function renderProfile(){
   const rated = Object.keys(cnt).map(Number).filter(function(id){ return avgStars(id) >= 4; })
     .sort(function(a, b){ return avgStars(b) - avgStars(a); });
   const favIds = p.favs.slice().reverse().concat(rated.filter(function(id){ return p.favs.indexOf(id) < 0; }));
-  $('pdFavN').textContent = favIds.length;
   $('pdFav').innerHTML = favIds.length ? favIds.map(function(id){
     const r = findR(id); if(!r) return '';
     const av = avgStars(id);
@@ -978,11 +983,17 @@ function renderProfile(){
   }).join('') : '<div class="empty">Нажми ♡ на карточке рецепта или поставь блюду 4–5 звёзд.</div>';
 
   renderAch(st);
+  const hc = p.cooked.length;
+  $('accHistN').textContent = hc ? hc + ' ' + plural(hc, 'готовка', 'готовки', 'готовок') + ' · средняя ' + st.avg.toFixed(1) + '★' : 'пока пусто';
+  $('accWeightN').textContent = w.length ? w[w.length-1].kg.toFixed(1) + ' кг' + (wd !== null ? ' · ' + (wd > 0 ? '+' : '') + wd + ' кг с начала' : '') : 'нет записей';
+  $('pdCookedN').textContent = cookedIds.length ? cookedIds.length + ' ' + plural(cookedIds.length, 'рецепт', 'рецепта', 'рецептов') : 'пока пусто';
+  $('pdFavN').textContent = favIds.length ? favIds.length + ' ' + plural(favIds.length, 'рецепт', 'рецепта', 'рецептов') : 'пока пусто';
+  if(accOpen.weight) requestAnimationFrame(drawChart);
 }
 
 function renderAch(st){
   const done = new Set(ME.profile.achDone || []);
-  $('pdAchN').textContent = done.size;
+  $('pdAchSub').textContent = done.size + ' из 100 получено';
   $('pdAchBar').style.width = done.size + '%';
   $('pdAchCats').innerHTML = [{ id:'all', label:'Все' }].concat(ACH_CATS).map(function(c){
     const n = c.id === 'all' ? done.size : ACHIEVEMENTS.filter(function(a){ return a.cat === c.id && done.has(a.id); }).length;
@@ -1010,7 +1021,7 @@ $('pdAchCats').addEventListener('click', function(e){
 });
 
 /* ================= init ================= */
-function renderAll(){ renderRecipes(); renderWeight(); renderGym(); renderHistory(); }
+function renderAll(){ renderRecipes(); renderWeight(); renderGym(); renderHistory(); renderDiary(); }
 $('wDate').value = today();
 $('rateDate').value = today();
 setMode('login');

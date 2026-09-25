@@ -275,6 +275,83 @@
       </div>
     </section>
 
+    <!-- ---- TAB: ДНЕВНИК ---- -->
+    <section class="tab" id="tab-diary">
+      <div class="phead dhead">
+        <div>
+          <h1>Дневник</h1>
+          <p>Еда, вода и тренировки за день — всё в одном месте.</p>
+        </div>
+        <button class="btn sm ghost" type="button" id="dToday">Сегодня</button>
+      </div>
+
+      <!-- неделя + стрик -->
+      <div class="dcard dweekcard">
+        <div class="dstreak" id="dStreak">
+          <span class="dstreak-fire"><svg viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2.2-4.8.3 1.6 1 2.6 2.1 3.1C11 9 10.8 6 12 3z"/></svg></span>
+          <div><b id="dStreakN">0</b><span id="dStreakTxt">дней подряд</span><small id="dStreakBest">рекорд 0</small></div>
+        </div>
+        <div class="dweek-wrap">
+          <div class="dweek-top">
+            <button type="button" class="dnav" id="dPrev" aria-label="Прошлая неделя"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <b id="dDateLabel">Сегодня</b>
+            <button type="button" class="dnav" id="dNext" aria-label="Следующая неделя"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+          </div>
+          <div class="dweek" id="dWeek"></div>
+        </div>
+      </div>
+
+      <!-- калории и КБЖУ -->
+      <div class="dcard dsum">
+        <div class="dring" id="dRingWrap">
+          <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="dring-bg"/><circle cx="60" cy="60" r="52" class="dring-fg" id="dRing"/></svg>
+          <div class="dring-c"><b id="dEaten">0</b><span id="dGoal">/ 2000 ккал</span></div>
+        </div>
+        <div class="dsum-r">
+          <p class="dline1" id="dLine1"></p>
+          <p class="dline2" id="dLine2"></p>
+          <div class="dmacros" id="dMacros"></div>
+        </div>
+      </div>
+
+      <!-- приёмы пищи -->
+      <div class="dmeals" id="dMeals"></div>
+
+      <!-- тренировка -->
+      <div class="dcard dwo">
+        <div class="dcard-h">
+          <span class="dcard-ic"><svg viewBox="0 0 24 24"><path d="M6 8v8M18 8v8M3 10v4M21 10v4M6 12h12"/></svg></span>
+          <div class="dcard-t"><b>Тренировка</b><span id="dWoSub"></span></div>
+          <button type="button" class="dprog" id="dWoProg"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Мой прогресс</span></button>
+          <button type="button" class="dplus" id="dWoAdd" aria-label="Добавить упражнение"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+        <div class="dlist" id="dWoList"></div>
+        <div class="dbw">
+          <div class="dbw-l"><span>Вес тела</span><b id="dBwVal">—</b></div>
+          <button type="button" class="dspark" id="dBwProg" aria-label="График веса тела"><span id="dSpark"></span></button>
+          <div class="dbw-f">
+            <input id="dBwInput" type="number" inputmode="decimal" step="0.1" min="35" max="250" placeholder="75.0" aria-label="Вес тела, кг" />
+            <button class="btn sm" type="button" id="dBwSave">Записать</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- вода -->
+      <div class="dcard dwater" id="dWaterCard">
+        <div class="dcard-h">
+          <span class="dcard-ic water"><svg viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></span>
+          <div class="dcard-t"><b>Трекер воды</b><span id="dWaterSub"></span></div>
+          <div class="dwater-v" id="dWaterVal"></div>
+        </div>
+        <div class="dwater-bar"><i id="dWaterFill"></i></div>
+        <div class="dwater-row">
+          <button type="button" class="wbtn" id="dWaterMinus" aria-label="Минус стакан">−</button>
+          <div class="glasses" id="dGlasses"></div>
+          <button type="button" class="wbtn plus" id="dWaterPlus" aria-label="Плюс стакан 250 мл">+250</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ---- TAB: РЕЦЕПТЫ ---- -->
     <section class="tab" id="tab-recipes">
       <div class="phead">
@@ -326,24 +403,6 @@
       </div>
     </section>
 
-    <!-- ---- TAB: ВЕС ---- -->
-    <section class="tab" id="tab-weight">
-      <div class="phead">
-        <h1>Мой вес</h1>
-        <p>Записывай вес раз в несколько дней — график покажет реальную динамику, а не колебания воды.</p>
-      </div>
-      <div class="kpis" id="wStats" style="margin-bottom:16px"></div>
-      <div class="chartbox" style="margin-bottom:18px"><canvas id="chart"></canvas></div>
-      <div class="card" style="margin-bottom:16px">
-        <div class="wform">
-          <div class="field"><label for="wKg">Вес, кг</label><input id="wKg" type="number" step="0.1" min="35" max="250" placeholder="76.4" /></div>
-          <div class="field"><label for="wDate">Дата</label><input id="wDate" type="date" /></div>
-          <button class="btn" type="button" id="wSave">Записать</button>
-        </div>
-      </div>
-      <div class="wlist" id="wList"></div>
-    </section>
-
     <!-- ---- TAB: УПРАЖНЕНИЯ ---- -->
     <section class="tab" id="tab-gym">
       <div class="phead">
@@ -354,16 +413,6 @@
       <div class="egrid" id="gymGrid"></div>
     </section>
 
-    <!-- ---- TAB: ИСТОРИЯ ---- -->
-    <section class="tab" id="tab-history">
-      <div class="phead">
-        <h1>История блюд</h1>
-        <p>Всё, что ты готовил, с оценкой от 1 до 5 звёзд и заметками.</p>
-      </div>
-      <div class="kpis" id="hStats" style="margin-bottom:16px"></div>
-      <div class="hlist" id="hList"></div>
-      <button class="logout" type="button" id="wipe" style="margin-top:18px;max-width:260px">Стереть все мои данные</button>
-    </section>
   </main>
 
   <nav class="tabbar" id="tabbar"></nav>
@@ -395,19 +444,67 @@
           <h4>Активность и прогресс</h4>
           <div class="kpis pd-kpis" id="pdStats"></div>
         </section>
-        <section class="pd-sec">
-          <h4>Приготовленные рецепты <small id="pdCookedN">0</small></h4>
-          <div class="pgrid" id="pdCooked"></div>
+        <section class="pd-sec acc" data-acc="history">
+          <button class="acc-h" type="button" aria-expanded="false">
+            <span class="acc-ic"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg></span>
+            <span class="acc-t"><b>История ваших блюд</b><small id="accHistN"></small></span>
+            <i class="acc-chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></i>
+          </button>
+          <div class="acc-b"><div class="acc-in">
+            <div class="kpis pd-kpis" id="hStats" style="margin-bottom:12px"></div>
+            <div class="hlist" id="hList"></div>
+            <button class="logout" type="button" id="wipe" style="margin-top:14px;max-width:260px">Стереть историю блюд и взвешивания</button>
+          </div></div>
         </section>
-        <section class="pd-sec">
-          <h4>Избранное и больше всего понравилось <small id="pdFavN">0</small></h4>
-          <div class="pgrid" id="pdFav"></div>
+        <section class="pd-sec acc" data-acc="weight">
+          <button class="acc-h" type="button" aria-expanded="false">
+            <span class="acc-ic"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/></svg></span>
+            <span class="acc-t"><b>Мой вес</b><small id="accWeightN"></small></span>
+            <i class="acc-chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></i>
+          </button>
+          <div class="acc-b"><div class="acc-in">
+            <div class="kpis pd-kpis" id="wStats" style="margin-bottom:12px"></div>
+            <div class="chartbox" style="margin-bottom:12px"><canvas id="chart"></canvas></div>
+            <div class="wform pd-wform">
+              <div class="field"><label for="wKg">Вес, кг</label><input id="wKg" type="number" step="0.1" min="35" max="250" placeholder="76.4" /></div>
+              <div class="field"><label for="wDate">Дата</label><input id="wDate" type="date" /></div>
+              <button class="btn" type="button" id="wSave">Записать</button>
+            </div>
+            <p class="foot" style="margin:8px 0 12px">Взвешивайся утром натощак раз в несколько дней — график покажет реальную динамику, а не колебания воды.</p>
+            <div class="wlist" id="wList"></div>
+          </div></div>
         </section>
-        <section class="pd-sec">
-          <h4>Достижения <small><span id="pdAchN">0</span>/100</small></h4>
-          <div class="bar pd-achbar"><i id="pdAchBar" style="width:0;background:var(--lime)"></i></div>
-          <div class="chips pd-cats" id="pdAchCats"></div>
-          <div class="achgrid" id="pdAch"></div>
+        <section class="pd-sec acc open" data-acc="cooked">
+          <button class="acc-h" type="button" aria-expanded="true">
+            <span class="acc-ic"><svg viewBox="0 0 24 24"><path d="M4 11h16v3a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z"/><path d="M2 11h20"/></svg></span>
+            <span class="acc-t"><b>Приготовленные рецепты</b><small id="pdCookedN"></small></span>
+            <i class="acc-chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></i>
+          </button>
+          <div class="acc-b"><div class="acc-in">
+            <div class="pgrid" id="pdCooked"></div>
+          </div></div>
+        </section>
+        <section class="pd-sec acc open" data-acc="fav">
+          <button class="acc-h" type="button" aria-expanded="true">
+            <span class="acc-ic"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span>
+            <span class="acc-t"><b>Избранное и больше всего понравилось</b><small id="pdFavN"></small></span>
+            <i class="acc-chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></i>
+          </button>
+          <div class="acc-b"><div class="acc-in">
+            <div class="pgrid" id="pdFav"></div>
+          </div></div>
+        </section>
+        <section class="pd-sec acc" data-acc="ach">
+          <button class="acc-h" type="button" aria-expanded="false">
+            <span class="acc-ic"><svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8M10 17h4"/></svg></span>
+            <span class="acc-t"><b>Достижения</b><small id="pdAchSub"></small></span>
+            <i class="acc-chev"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></i>
+          </button>
+          <div class="acc-b"><div class="acc-in">
+            <div class="bar pd-achbar"><i id="pdAchBar" style="width:0;background:var(--lime)"></i></div>
+            <div class="chips pd-cats" id="pdAchCats"></div>
+            <div class="achgrid" id="pdAch"></div>
+          </div></div>
         </section>
       </div>
     </aside>
@@ -452,7 +549,173 @@
       </div>
       <div class="field"><label for="rateDate">Когда готовил</label><input id="rateDate" type="date" /></div>
       <div class="field"><label for="rateNote">Заметка (необязательно)</label><input id="rateNote" type="text" placeholder="В следующий раз меньше соли" /></div>
+      <label class="chk"><input type="checkbox" id="rateDiary" checked /> <span>Записать в дневник питания</span></label>
+      <div class="seg" id="rateMeal">
+        <button type="button" data-v="breakfast" class="on">Завтрак</button>
+        <button type="button" data-v="lunch">Обед</button>
+        <button type="button" data-v="dinner">Ужин</button>
+        <button type="button" data-v="snack">Перекус</button>
+      </div>
       <button class="btn wide" type="button" id="rateSave">Добавить в историю</button>
+    </div>
+  </div>
+</div>
+
+<!-- добавление еды -->
+<div class="modal" id="foodModal">
+  <div class="sheet wide fsheet">
+    <div class="sheethead">
+      <h3>Добавить еду</h3>
+      <button class="x" type="button" id="foodClose" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="sheetbody">
+      <div class="seg fmealseg" id="fMealSeg">
+        <button type="button" data-v="breakfast" class="on">Завтрак</button>
+        <button type="button" data-v="lunch">Обед</button>
+        <button type="button" data-v="dinner">Ужин</button>
+        <button type="button" data-v="snack">Перекус</button>
+      </div>
+
+      <div id="fMain">
+        <div class="ftabs" id="fTabs">
+          <button type="button" data-v="search" class="on"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Поиск</button>
+          <button type="button" data-v="barcode"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg>Штрих-код</button>
+          <button type="button" data-v="photo"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>По фото (ИИ)</button>
+        </div>
+
+        <!-- 1. поиск -->
+        <div class="fpane" id="fPane-search">
+          <div class="fsearch">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input id="fQ" type="search" autocomplete="off" placeholder="Гречка, творог 5%, банан…" aria-label="Название продукта или блюда" />
+          </div>
+          <div class="fres-list" id="fRes"></div>
+          <div class="foff">
+            <button class="btn sm ghost" type="button" id="fOffBtn"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg>Найти в магазинных продуктах</button>
+            <button class="linkbtn" type="button" id="fManualLink">+ Свой продукт</button>
+          </div>
+          <p class="fhint small" id="fOffStatus"></p>
+          <div class="fres-list" id="fOffRes"></div>
+        </div>
+
+        <!-- 2. штрих-код -->
+        <div class="fpane" id="fPane-barcode" style="display:none">
+          <div class="bcbox" id="bcBox">
+            <video id="bcVideo" playsinline muted></video>
+            <div class="bcframe"><i></i><i></i><i></i><i></i><span class="bcline"></span></div>
+            <div class="bcidle"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg><span>Российские товары ищутся в OpenFoodFacts с русской локалью</span></div>
+          </div>
+          <div class="bcbtns">
+            <button class="btn" type="button" id="bcStart"><svg viewBox="0 0 24 24" class="bi"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Включить камеру</button>
+            <button class="btn ghost" type="button" id="bcStop" style="display:none">Выключить</button>
+            <label class="btn ghost bcfile">Фото штрих-кода<input id="bcFile" type="file" accept="image/*" capture="environment" hidden /></label>
+          </div>
+          <p class="bcstatus" id="bcStatus">Нажми «Включить камеру» и наведи на штрих-код на упаковке.</p>
+          <div class="bcmanual">
+            <input id="bcCode" type="text" inputmode="numeric" maxlength="14" placeholder="4607001771265" aria-label="Цифры штрих-кода" />
+            <button class="btn sm" type="button" id="bcFind">Найти</button>
+          </div>
+        </div>
+
+        <!-- 3. фото + ИИ -->
+        <div class="fpane" id="fPane-photo" style="display:none">
+          <label class="aidrop" id="aiDrop">
+            <input id="aiFile" type="file" accept="image/*" capture="environment" hidden />
+            <img id="aiImg" alt="Фото тарелки" />
+            <span class="aidrop-ph"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>Сфотографируй тарелку</b><small>Сверху, при хорошем свете, чтобы было видно всю порцию</small></span>
+            <span class="aiscan"></span>
+          </label>
+          <button class="btn wide" type="button" id="aiGo" disabled>Распознать блюдо и посчитать КБЖУ</button>
+          <div id="aiResult"></div>
+          <details class="aicfg" id="aiCfg">
+            <summary>Настройки распознавания · <span id="aiCfgState">не настроено</span></summary>
+            <div class="aicfg-b">
+              <div class="seg" id="aiProv">
+                <button type="button" data-v="openai" class="on">OpenAI (свой ключ)</button>
+                <button type="button" data-v="proxy">Свой сервер</button>
+              </div>
+              <div id="aiKeyRow">
+                <div class="field"><label for="aiKey">Ключ API OpenAI</label><input id="aiKey" type="password" autocomplete="off" placeholder="sk-…" /></div>
+                <div class="field"><label for="aiModel">Модель</label><input id="aiModel" type="text" placeholder="gpt-4o-mini" /></div>
+                <p class="foot">Ключ хранится только в этом браузере и отправляется только в OpenAI. Одно фото стоит доли цента.</p>
+              </div>
+              <div id="aiEpRow" style="display:none">
+                <div class="field"><label for="aiEndpoint">Адрес сервера</label><input id="aiEndpoint" type="url" placeholder="https://…/vision" /></div>
+                <p class="foot">Сервер принимает POST {"image": dataURL} и возвращает JSON с блюдами и КБЖУ — ключ не попадает в браузер.</p>
+              </div>
+              <button class="btn sm" type="button" id="aiSave">Сохранить</button>
+            </div>
+          </details>
+        </div>
+
+        <!-- свой продукт -->
+        <div class="fpane" id="fPane-manual" style="display:none">
+          <div class="field"><label for="fmName">Название</label><input id="fmName" type="text" placeholder="Йогурт питьевой клубника" /></div>
+          <input id="fmCode" type="hidden" />
+          <div class="field"><label>КБЖУ указаны</label>
+            <div class="seg" id="fmMode"><button type="button" data-v="100" class="on">на 100 г (как на упаковке)</button><button type="button" data-v="portion">на всю порцию</button></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label for="fmGrams">Съел, г</label><input id="fmGrams" type="number" min="0" step="5" value="100" /></div>
+            <div class="field"><label for="fmKcal">Калории</label><input id="fmKcal" type="number" min="0" step="1" /></div>
+          </div>
+          <div class="row3">
+            <div class="field"><label for="fmP">Белки, г</label><input id="fmP" type="number" min="0" step="0.1" /></div>
+            <div class="field"><label for="fmF">Жиры, г</label><input id="fmF" type="number" min="0" step="0.1" /></div>
+            <div class="field"><label for="fmC">Углеводы, г</label><input id="fmC" type="number" min="0" step="0.1" /></div>
+          </div>
+          <button class="btn wide" type="button" id="fmAdd">Добавить</button>
+        </div>
+      </div>
+
+      <!-- выбор порции -->
+      <div class="fportion" id="fPortion" style="display:none">
+        <button class="linkbtn" type="button" id="fpBack">← Назад к поиску</button>
+        <div><h4 id="fpName"></h4><p class="rmeta" id="fpBrand"></p><p class="rmeta" id="fpPer"></p></div>
+        <div class="fp-amount">
+          <button type="button" class="wbtn" id="fpMinus" aria-label="Меньше">−</button>
+          <label><input id="fpAmount" type="number" inputmode="decimal" min="0" /><span id="fpUnit">г</span></label>
+          <button type="button" class="wbtn" id="fpPlus" aria-label="Больше">+</button>
+        </div>
+        <div class="chips" id="fpChips"></div>
+        <div class="fp-res" id="fpRes"></div>
+        <button class="btn wide" type="button" id="fpAdd">Добавить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- тренировка -->
+<div class="modal" id="woModal">
+  <div class="sheet">
+    <div class="sheethead">
+      <h3 id="woTitle">Добавить упражнение</h3>
+      <button class="x" type="button" data-close="woModal" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="sheetbody">
+      <div class="field"><label for="woName">Упражнение</label><input id="woName" list="woList" type="text" placeholder="Жим лёжа, присед…" autocomplete="off" /><datalist id="woList"></datalist></div>
+      <div id="woRecentWrap"><div class="fsub">Недавние</div><div class="chips" id="woRecent"></div></div>
+      <p class="wolast" id="woLast"></p>
+      <div class="sethead"><span>Подход</span><span>Повторы × рабочий вес</span></div>
+      <div class="sets" id="woSets"></div>
+      <button class="btn ghost wide" type="button" id="woAddSet">+ Подход (копия прошлого)</button>
+      <button class="btn wide" type="button" id="woSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- мой прогресс -->
+<div class="modal" id="progModal">
+  <div class="sheet wide">
+    <div class="sheethead">
+      <h3>Мой прогресс</h3>
+      <button class="x" type="button" data-close="progModal" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="sheetbody">
+      <div class="seg" id="progTabs"><button type="button" data-v="body" class="on">Вес тела</button><button type="button" data-v="str">Силовые показатели</button></div>
+      <div class="field" id="progExWrap" style="display:none"><label for="progEx">Упражнение</label><select id="progEx"></select></div>
+      <div class="kpis prog-kpis" id="progKpis"></div>
+      <div class="chartbox"><canvas id="progChart" class="progchart"></canvas></div>
     </div>
   </div>
 </div>
@@ -462,6 +725,8 @@
 
 <script src="static/data.js"></script>
 <script src="static/achievements.js"></script>
+<script src="static/foods.js"></script>
+<script src="static/diary.js"></script>
 <script src="static/path-fix.js"></script>
 <script src="static/app.js"></script>
 
