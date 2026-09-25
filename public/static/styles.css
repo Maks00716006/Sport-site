@@ -901,3 +901,16 @@
   .kpi b small{font-size:12px;color:var(--muted);font-weight:600;}
   .kpi.good b small{color:var(--muted);}
   @media (max-width:560px){ .gsearch input{padding-right:96px;} }
+
+  /* ---------- без случайного выделения на цифрах, счётчиках и кнопках ---------- */
+  button,.btn,.chip,.seg,.navbtn,.tabbar,
+  .normbig,.macro,.macros,.bar,.splitrow,
+  .dring,.dmacros,.dstreak,.dweek,.wday,.glasses,.dwater-v,.dwater-row,
+  .kpi,.kpis,.fpk,.fp-res,.stk,.stk-week,.pfab,.acc-h,
+  .rtag,.ephoto,.rphoto,.stars,.starpick,.slot em{
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  }
+  .normbig b,.dring-c b,.macro b,.kpi b{cursor:default;}
+  /* поля ввода по-прежнему можно выделять */
+  input,textarea,select{-webkit-user-select:text;user-select:text;}
+  button,.chip,.wday,.glass,.dplus{-webkit-tap-highlight-color:transparent;}
