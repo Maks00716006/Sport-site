@@ -182,6 +182,7 @@ segInit('rSub', function(v){
   $('viewAll').style.display = v === 'all' ? '' : 'none';
   $('viewDay').style.display = v === 'day' ? '' : 'none';
   $('viewShakes').style.display = v === 'shakes' ? '' : 'none';
+  $('rSearchWrap').style.display = v === 'day' ? 'none' : '';
   if(v === 'shakes') renderShakes();
   if(v === 'day' && !$('daySlots').children.length) buildDay();
 });
@@ -457,16 +458,36 @@ function recipeCard(r, i){
       '</div>' +
     '</div></article>';
 }
+/* поиск: все слова запроса должны встретиться в названии, ингредиентах или типе блюда */
+let rQuery = '', eQuery = '';
+function matchQ(hay, q){
+  const nq = normTxt(q); if(!nq) return true;
+  const h = normTxt(hay);
+  return nq.split(' ').every(function(w){ return h.indexOf(w) >= 0; });
+}
+function recipeHay(r){ return r.name + ' ' + r.ing.join(' ') + ' ' + r.kind + ' ' + r.meal.map(function(m){ return MEAL_LABEL[m]; }).join(' ') + (r.shake ? ' коктейль шейк протеин' : ''); }
 function renderRecipes(){
   const list = RECIPES.filter(function(r){
-    return (fMeal === 'all' || r.meal.indexOf(fMeal) >= 0) && (fKind === 'all' || r.kind === fKind);
+    return (fMeal === 'all' || r.meal.indexOf(fMeal) >= 0) && (fKind === 'all' || r.kind === fKind) && matchQ(recipeHay(r), rQuery);
   });
-  if(!list.length){ $('recipeGrid').innerHTML = '<div class="empty">Под такие фильтры ничего нет. Сбрось один из них.</div>'; return; }
+  $('rQn').textContent = rQuery ? list.length + ' ' + plural(list.length, 'рецепт', 'рецепта', 'рецептов') : '';
+  if(!list.length){
+    $('recipeGrid').innerHTML = '<div class="empty">' + (rQuery ? 'По запросу «' + esc(rQuery) + '» ничего не нашлось' + (fMeal !== 'all' || fKind !== 'all' ? ' с этими фильтрами' : '') + '. <button class="linkbtn" type="button" onclick="clearRQ()">Сбросить поиск</button>' : 'Под такие фильтры ничего нет. Сбрось один из них.') + '</div>';
+    return;
+  }
   $('recipeGrid').innerHTML = list.map(recipeCard).join('');
 }
 function renderShakes(){
-  $('shakeGrid').innerHTML = SHAKES.map(recipeCard).join('');
+  const list = SHAKES.filter(function(r){ return matchQ(recipeHay(r), rQuery); });
+  if($('viewShakes').style.display !== 'none') $('rQn').textContent = rQuery ? list.length + ' ' + plural(list.length, 'коктейль', 'коктейля', 'коктейлей') : '';
+  $('shakeGrid').innerHTML = list.length ? list.map(recipeCard).join('')
+    : '<div class="empty">Коктейля «' + esc(rQuery) + '» нет. <button class="linkbtn" type="button" onclick="clearRQ()">Сбросить поиск</button></div>';
 }
+function clearRQ(){ rQuery = ''; $('rQ').value = ''; renderRecipes(); renderShakes(); }
+$('rQ').addEventListener('input', function(){
+  rQuery = this.value.trim();
+  if($('viewShakes').style.display !== 'none') renderShakes(); else renderRecipes();
+});
 function openRecipe(id){
   const r = findR(id);
   $('rmTitle').textContent = r.name;
@@ -523,50 +544,99 @@ $('rateSave').onclick = function(){
 };
 
 /* ================= ГОТОВЫЙ ДЕНЬ ================= */
-function pick(meal){
+/* Подбор меню под норму калорий.
+   Для каждого приёма пищи берём случайный рецепт и размер порции (½…2 с шагом ¼),
+   ближайший к доле нормы (завтрак 25%, обед 35%, ужин 25%, перекус 15%),
+   затем подгоняем порции, чтобы сумма совпала с нормой. Из сотен вариантов
+   выбираем тот, где итог ближе всего к норме, а белок — к норме белка. */
+const DAY_PORTIONS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+let lastDay = null;
+function dayPool(meal){
   const list = RECIPES.filter(function(r){ return r.meal.indexOf(meal) >= 0; });
-  return list[Math.floor(Math.random() * list.length)];
+  return meal === 'snack' ? list.concat(SHAKES) : list;
 }
-function portion(n){
-  if(n === 0.5) return 'полпорции · ';
-  if(n === 1.5) return '1,5 порции · ';
-  if(n === 2) return '2 порции · ';
-  return '';
+function planDay(target, protein){
+  let slots = [{ k:'breakfast', share:.25 }, { k:'lunch', share:.35 }, { k:'dinner', share:.25 }, { k:'snack', share:.15 }];
+  // при очень высокой норме 4 приёмов даже по 2 порции может не хватить — добавляем второй перекус
+  const maxOf = function(k){ return Math.max.apply(null, dayPool(k).map(function(r){ return r.kcal; })) * 2; };
+  const cap = slots.reduce(function(s2, x){ return s2 + maxOf(x.k) * .8; }, 0);
+  if(target > cap) slots = [{ k:'breakfast', share:.22 }, { k:'lunch', share:.3 }, { k:'dinner', share:.22 }, { k:'snack', share:.13 }, { k:'snack', share:.13, extra:true }];
+  const nearest = function(kcal, want){
+    return DAY_PORTIONS.reduce(function(b, m){ return Math.abs(kcal * m - want) < Math.abs(kcal * b - want) ? m : b; }, 1);
+  };
+  let best = null;
+  for(let t = 0; t < 900; t++){
+    const used = {}, plan = slots.map(function(sl){
+      const pool = dayPool(sl.k).filter(function(r){ return !used[r.id]; });
+      const r = pool[Math.floor(Math.random() * pool.length)];
+      used[r.id] = 1;
+      return { k:sl.k, extra:sl.extra, r:r, m:nearest(r.kcal, target * sl.share) };
+    });
+    // точная подгонка: по шагу ¼ порции уменьшаем разницу с нормой
+    for(let it = 0; it < 12; it++){
+      const tot = plan.reduce(function(a, x){ return a + x.r.kcal * x.m; }, 0);
+      let bestMove = null, bestErr = Math.abs(tot - target);
+      plan.forEach(function(x, i){
+        [-.25, .25].forEach(function(d){
+          const m = x.m + d; if(m < .5 || m > 2) return;
+          const err = Math.abs(tot + x.r.kcal * d - target);
+          if(err < bestErr - 1){ bestErr = err; bestMove = [i, m]; }
+        });
+      });
+      if(!bestMove) break;
+      plan[bestMove[0]].m = bestMove[1];
+    }
+    const kcal = plan.reduce(function(a, x){ return a + x.r.kcal * x.m; }, 0);
+    const p = plan.reduce(function(a, x){ return a + x.r.p * x.m; }, 0);
+    const score = Math.abs(kcal - target) / target * 100 + Math.max(0, protein - p) / protein * 25;
+    if(!best || score < best.score) best = { plan:plan, score:score };
+    if(Math.abs(kcal - target) <= target * .012 && p >= protein * .85 && t > 40) break;
+  }
+  return best.plan;
+}
+function portionLabel(m){
+  return { 0.5:'½ порции', 0.75:'¾ порции', 1:'1 порция', 1.25:'1¼ порции', 1.5:'1½ порции', 1.75:'1¾ порции', 2:'2 порции' }[m] || (m + ' порции');
 }
 function buildDay(){
-  const slots = { breakfast:pick('breakfast'), lunch:pick('lunch'), dinner:pick('dinner'), snack:pick('snack') };
-  const mult = { breakfast:1, lunch:1, dinner:1, snack:1 };
-  const keys = ['breakfast','lunch','dinner','snack'];
-  const sumWith = function(){ return keys.reduce(function(s, k){ return s + slots[k].kcal * mult[k]; }, 0); };
-  for(let guard = 0; guard < 14; guard++){
-    const diff = norm.kcal - sumWith();
-    if(Math.abs(diff) <= 60) break;
-    const dir = diff > 0 ? 0.5 : -0.5;
-    const cand = keys.filter(function(k){ const v = mult[k] + dir; return v >= 0.5 && v <= 2; });
-    if(!cand.length) break;
-    cand.sort(function(a, b){ return dir > 0 ? mult[a] - mult[b] : mult[b] - mult[a]; });
-    mult[cand[0]] += dir;
-  }
-  const sc = function(v, k){ return Math.round(v * mult[k]); };
-  $('daySlots').innerHTML = keys.map(function(k, idx){
-    const r = slots[k];
+  const target = norm.kcal;
+  const plan = planDay(target, norm.p);
+  lastDay = plan;
+  const sc = function(v, m){ return Math.round(v * m); };
+  $('daySlots').innerHTML = plan.map(function(x, idx){
+    const r = x.r;
     return '<div class="slot" style="--d:' + (idx * 0.06) + 's">' +
       '<div class="slot-photo">' + foodThumb(r) + '</div>' +
-      '<div class="slot-body"><i>' + MEAL_LABEL[k] + '</i><b>' + esc(r.name) + '</b>' +
-      '<em>' + portion(mult[k]) + sc(r.kcal, k) + ' ккал · ' + r.time + ' мин</em>' +
+      '<div class="slot-body"><i>' + (x.extra ? 'Второй перекус' : MEAL_LABEL[x.k]) + '</i><b>' + esc(r.name) + '</b>' +
+      '<em>' + portionLabel(x.m) + ' · <strong>' + sc(r.kcal, x.m) + ' ккал</strong> · ' + r.time + ' мин</em>' +
+      '<em class="slot-m">Б ' + sc(r.p, x.m) + ' · Ж ' + sc(r.f, x.m) + ' · У ' + sc(r.c, x.m) + '</em>' +
       '<div style="margin-top:10px"><button class="linkbtn" type="button" onclick="openRecipe(' + r.id + ')">Рецепт →</button></div></div></div>';
   }).join('');
-  const tot = keys.reduce(function(a, k){
-    const r = slots[k];
-    return { kcal:a.kcal + sc(r.kcal, k), p:a.p + sc(r.p, k), f:a.f + sc(r.f, k), c:a.c + sc(r.c, k) };
+  const tot = plan.reduce(function(a, x){
+    return { kcal:a.kcal + x.r.kcal * x.m, p:a.p + x.r.p * x.m, f:a.f + x.r.f * x.m, c:a.c + x.r.c * x.m };
   }, { kcal:0, p:0, f:0, c:0 });
-  const diff = tot.kcal - norm.kcal;
+  const kcal = Math.round(tot.kcal), diff = kcal - target, ok = Math.abs(diff) <= target * .03;
   $('dayTotal').innerHTML =
-    '<div class="kpi"><b>' + tot.kcal + '</b><span>ккал за день</span></div>' +
-    '<div class="kpi"><b>' + tot.p + ' г</b><span>белки</span></div>' +
-    '<div class="kpi"><b>' + tot.f + ' г</b><span>жиры</span></div>' +
-    '<div class="kpi ' + (Math.abs(diff) <= 120 ? 'good' : '') + '"><b>' + (diff >= 0 ? '+' : '') + diff + '</b><span>к норме ' + norm.kcal + '</span></div>';
+    '<div class="kpi"><b>' + kcal + '</b><span>ккал за день</span></div>' +
+    '<div class="kpi ' + (tot.p >= norm.p * .85 ? 'good' : '') + '"><b>' + Math.round(tot.p) + ' <small>/ ' + norm.p + ' г</small></b><span>белки</span></div>' +
+    '<div class="kpi"><b>' + Math.round(tot.f) + ' г</b><span>жиры</span></div>' +
+    '<div class="kpi ' + (ok ? 'good' : '') + '"><b>' + (diff >= 0 ? '+' : '') + diff + '</b><span>к норме ' + target + '</span></div>';
+  $('dayHint').textContent = ok
+    ? 'Итого ' + kcal + ' ккал при норме ' + target + ' — разница ' + Math.abs(diff) + ' ккал (' + (Math.abs(diff) / target * 100).toFixed(1) + '%). Не нравится блюдо — жми «Собрать день» ещё раз.'
+    : 'Ближе к норме ' + target + ' ккал из рецептов сайта не собрать — разница ' + Math.abs(diff) + ' ккал.';
+  $('dayToDiary').style.display = '';
 }
+$('dayToDiary').onclick = function(){
+  if(!lastDay) return;
+  const d = dayData(today(), true);
+  lastDay.forEach(function(x){
+    const r = x.r;
+    d.meals[x.k].push({ id:uid(), name:r.name, brand:'готовый день', grams:null, portion:portionLabel(x.m),
+      kcal:Math.round(r.kcal * x.m), p:r1(r.p * x.m), f:r1(r.f * x.m), c:r1(r.c * x.m), src:'recipe',
+      base:{ id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, per100:false, src:'recipe' } });
+  });
+  save(); renderDiary(); achCheck();
+  toast('Меню записано в дневник на сегодня');
+};
 $('dayGo').onclick = function(){ buildDay(); ME.profile.daysBuilt = (ME.profile.daysBuilt || 0) + 1; save(); achCheck(); };
 
 /* ================= МОЙ ВЕС ================= */
@@ -720,7 +790,19 @@ function bodySvg(view, main, also){
   return b;
 }
 function renderGym(){
-  const list = EXERCISES.filter(function(e){ return fGroup === 'Все' || e.group === fGroup; });
+  // «бицепс» ≠ «бицепс бедра»: без слова «бедро» в запросе не путаем руки с ногами
+  const thigh = /бедр/.test(normTxt(eQuery));
+  const fix = function(t){ return thigh ? t : t.replace(/[Бб]ицепс бедра/g, 'задняя поверхность бедра'); };
+  const rank = function(e){ return matchQ(e.name, eQuery) ? 0 : matchQ(fix(e.main) + ' ' + e.group, eQuery) ? 1 : 2; };
+  const list = EXERCISES.filter(function(e){
+    return (fGroup === 'Все' || e.group === fGroup) && matchQ(fix(e.name + ' ' + e.group + ' ' + e.main + ' ' + e.also.join(' ')), eQuery);
+  }).map(function(e, i){ return { e:e, i:i, r:eQuery ? rank(e) : 0 }; })
+    .sort(function(a, b){ return a.r - b.r || a.i - b.i; }).map(function(o){ return o.e; });   // сначала совпадения в названии
+  $('eQn').textContent = eQuery ? list.length + ' ' + plural(list.length, 'упражнение', 'упражнения', 'упражнений') : '';
+  if(!list.length){
+    $('gymGrid').innerHTML = '<div class="empty">По запросу «' + esc(eQuery) + '» ничего не нашлось' + (fGroup !== 'Все' ? ' в группе «' + fGroup + '»' : '') + '. <button class="linkbtn" type="button" onclick="clearEQ()">Сбросить поиск</button></div>';
+    return;
+  }
   $('gymGrid').innerHTML = list.map(function(e){
     return '<article class="ecard">' +
       '<div class="ephoto"><img src="' + e.img + '" alt="' + esc(e.name) + '" loading="lazy" /><b>' + e.group + '</b>' +
@@ -736,6 +818,8 @@ function renderGym(){
       '</div></article>';
   }).join('');
 }
+function clearEQ(){ eQuery = ''; $('eQ').value = ''; renderGym(); }
+$('eQ').addEventListener('input', function(){ eQuery = this.value.trim(); renderGym(); });
 function openEx(id){
   const e = EXERCISES.find(function(x){ return x.id === id; });
   const alsoTxt = e.also.map(function(m){ return esc(m); }).join(', ');
@@ -840,7 +924,7 @@ function achStats(){
   st.maxRepeat = Math.max.apply(null, [0].concat(Object.values(per)));
   st.shakesUnique = shakeIds.size;
   st.favs = p.favs.length;
-  st.exSeen = p.exSeen.length;
+  st.exSeen = p.exSeen.filter(function(id){ return EXERCISES.some(function(e){ return e.id === id; }); }).length;
   GROUPS.slice(1).forEach(function(g){ st['grp_' + g] = 0; });
   p.exSeen.forEach(function(id){ const e = EXERCISES.find(function(x){ return x.id === id; }); if(e) st['grp_' + e.group]++; });
   const fs = FoodStreak.get();

@@ -359,6 +359,12 @@
         <p>Максимум 5 ингредиентов, 3–35 минут и шаги в стиле «положи, включи, жди».</p>
       </div>
 
+      <div class="gsearch" id="rSearchWrap">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="rQ" type="search" autocomplete="off" placeholder="Поиск: курица, творог, банан, омлет…" aria-label="Поиск рецептов" />
+        <span class="gsearch-n" id="rQn"></span>
+      </div>
+
       <div class="seg rsub" id="rSub">
         <button type="button" data-v="all" class="on">Все рецепты</button>
         <button type="button" data-v="day">Готовый день</button>
@@ -377,11 +383,12 @@
         <div class="daycard">
           <div class="daycard-head">
             <div>
-              <b>Собери меню на день под свою норму</b>
-              <span>Завтрак, обед, ужин и перекус — калории подгонятся под цель автоматически.</span>
+              <b>Меню на день точно под твою норму</b>
+              <span id="dayHint">Подберу завтрак, обед, ужин и перекус и размер порций так, чтобы сумма совпала с нормой калорий.</span>
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <button class="btn" type="button" id="dayGo"><i class="dice">🎲</i> Собрать день</button>
+              <button class="btn ghost" type="button" id="dayToDiary" style="display:none">В дневник на сегодня</button>
             </div>
           </div>
         </div>
@@ -408,6 +415,11 @@
       <div class="phead">
         <h1>Упражнения в зале</h1>
         <p>На каждую группу мышц: фото техники, какие мышцы работают, сколько подходов и главные ошибки новичка.</p>
+      </div>
+      <div class="gsearch">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="eQ" type="search" autocomplete="off" placeholder="Поиск: жим, присед, бицепс, спина…" aria-label="Поиск упражнений" />
+        <span class="gsearch-n" id="eQn"></span>
       </div>
       <div class="chips" id="fGroup" style="margin-bottom:20px"></div>
       <div class="egrid" id="gymGrid"></div>
