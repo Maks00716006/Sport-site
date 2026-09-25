@@ -7,6 +7,8 @@ const esc = function(s){ return String(s).replace(/[&<>"]/g, function(c){ return
 function readUsers(){ try { return JSON.parse(localStorage.getItem(LSU)) || {}; } catch(e){ return {}; } }
 function writeUsers(u){ try { localStorage.setItem(LSU, JSON.stringify(u)); } catch(e){} }
 let USERS = readUsers();
+const ALL_RECIPES = RECIPES.concat(typeof SHAKES !== 'undefined' ? SHAKES : []);
+function findR(id){ return ALL_RECIPES.find(function(x){ return x.id === id; }); }
 let KEY = null;   // current login key
 let ME = null;    // { name, pass, profile }
 
@@ -112,6 +114,12 @@ function enter(key){
   KEY = key; ME = USERS[key];
   if(!ME.profile.cooked) ME.profile.cooked = [];
   if(!ME.profile.weights) ME.profile.weights = [];
+  const pr = ME.profile;
+  if(!pr.favs) pr.favs = [];
+  if(!pr.exSeen) pr.exSeen = [];
+  if(!pr.visits) pr.visits = [];
+  if(!pr.daysBuilt) pr.daysBuilt = 0;
+  if(pr.visits.indexOf(today()) < 0){ pr.visits.push(today()); save(); }
   try { localStorage.setItem(LSS, key); } catch(e){}
   $('auth').style.display = 'none';
   $('app').style.display = '';
@@ -119,11 +127,13 @@ function enter(key){
   $('ava').textContent = first; $('meName').textContent = ME.name; $('meMail').textContent = key;
   $('meNameM').textContent = ME.name;
   fillNorm(); renderAll(); go('norm');
+  achInit(); updateFab();
   window.scrollTo(0, 0);
 }
 function leave(){
   try { localStorage.removeItem(LSS); } catch(e){}
   KEY = null; ME = null;
+  closeProfile();
   $('app').style.display = 'none';
   $('auth').style.display = '';
   $('authStep1').style.display = ''; $('authStep2').style.display = 'none';
@@ -169,6 +179,8 @@ function go(id){
 segInit('rSub', function(v){
   $('viewAll').style.display = v === 'all' ? '' : 'none';
   $('viewDay').style.display = v === 'day' ? '' : 'none';
+  $('viewShakes').style.display = v === 'shakes' ? '' : 'none';
+  if(v === 'shakes') renderShakes();
   if(v === 'day' && !$('daySlots').children.length) buildDay();
 });
 document.addEventListener('click', function(e){
@@ -369,7 +381,9 @@ $('nSave').onclick = function(){
     const r = validateManualNorm();
     ME.profile.manualNorm = { kcal:r.kcal, p:r.p, f:r.f };
   }
+  ME.profile.normSaved = true;
   save(); toast('Сохранил в профиль');
+  achCheck();
 };
 
 /* ================= РЕЦЕПТЫ ================= */
@@ -410,34 +424,54 @@ function foodThumb(r){
   if(r.img) return '<img src="' + r.img + '" alt="' + esc(r.name) + '" loading="lazy" />';
   return '<div class="rph-ph"><span>' + (KIND_ICON[r.kind] || '🍽️') + '</span></div>';
 }
+const HEART = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
+function isFav(id){ return ME && ME.profile.favs.indexOf(id) >= 0; }
+function toggleFav(id, btn){
+  const f = ME.profile.favs, i = f.indexOf(id);
+  if(i >= 0) f.splice(i, 1); else f.push(id);
+  save();
+  document.querySelectorAll('.favbtn[data-id="' + id + '"]').forEach(function(b){ b.classList.toggle('on', i < 0); b.setAttribute('aria-pressed', i < 0); });
+  toast(i < 0 ? 'Добавил в избранное' : 'Убрал из избранного');
+  achCheck();
+}
+function favBtn(id){
+  const on = isFav(id);
+  return '<button type="button" class="favbtn' + (on ? ' on' : '') + '" data-id="' + id + '" aria-pressed="' + on + '" aria-label="В избранное" onclick="event.stopPropagation();toggleFav(' + id + ',this)">' + HEART + '</button>';
+}
+function recipeCard(r, i){
+  const av = avgStars(r.id);
+  return '<article class="rcard" style="--d:' + Math.min(i, 12) * 0.04 + 's">' +
+    '<div class="rphoto">' + foodThumb(r) + '<span class="rtag">' + r.kcal + ' ккал</span>' + favBtn(r.id) + '</div>' +
+    '<div class="rbody">' +
+      '<div class="rtop"><h3>' + esc(r.name) + '</h3></div>' +
+      '<div class="rmeta">' + r.time + ' мин · ' + r.kind + ' · ' + r.meal.map(function(m){ return MEAL_LABEL[m]; }).join(', ') + '</div>' +
+      '<div class="kb">' + (r.shake ? '<span class="pw">Протеин ' + r.powder + ' г</span>' : '') +
+        '<span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span>' +
+        (r.shake ? '' : '<span>' + r.ing.length + ' ингредиентов</span>') + '</div>' +
+      '<div class="rfoot">' +
+        '<button class="btn sm ghost" type="button" onclick="openRecipe(' + r.id + ')">Как готовить</button>' +
+        '<button class="linkbtn" type="button" onclick="openRate(' + r.id + ')">Оценить</button>' +
+        (av ? '<span class="stars" style="margin-left:auto">' + starsHtml(av) + '</span>' : '') +
+      '</div>' +
+    '</div></article>';
+}
 function renderRecipes(){
   const list = RECIPES.filter(function(r){
     return (fMeal === 'all' || r.meal.indexOf(fMeal) >= 0) && (fKind === 'all' || r.kind === fKind);
   });
   if(!list.length){ $('recipeGrid').innerHTML = '<div class="empty">Под такие фильтры ничего нет. Сбрось один из них.</div>'; return; }
-  $('recipeGrid').innerHTML = list.map(function(r, i){
-    const av = avgStars(r.id);
-    return '<article class="rcard" style="--d:' + Math.min(i, 12) * 0.04 + 's">' +
-      '<div class="rphoto">' + foodThumb(r) + '<span class="rtag">' + r.kcal + ' ккал</span></div>' +
-      '<div class="rbody">' +
-        '<div class="rtop"><h3>' + esc(r.name) + '</h3></div>' +
-        '<div class="rmeta">' + r.time + ' мин · ' + r.kind + ' · ' + r.meal.map(function(m){ return MEAL_LABEL[m]; }).join(', ') + '</div>' +
-        '<div class="kb"><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span>' + r.ing.length + ' ингредиентов</span></div>' +
-        '<div class="rfoot">' +
-          '<button class="btn sm ghost" type="button" onclick="openRecipe(' + r.id + ')">Как готовить</button>' +
-          '<button class="linkbtn" type="button" onclick="openRate(' + r.id + ')">Оценить</button>' +
-          (av ? '<span class="stars" style="margin-left:auto">' + starsHtml(av) + '</span>' : '') +
-        '</div>' +
-      '</div></article>';
-  }).join('');
+  $('recipeGrid').innerHTML = list.map(recipeCard).join('');
+}
+function renderShakes(){
+  $('shakeGrid').innerHTML = SHAKES.map(recipeCard).join('');
 }
 function openRecipe(id){
-  const r = RECIPES.find(function(x){ return x.id === id; });
+  const r = findR(id);
   $('rmTitle').textContent = r.name;
   $('rmBody').innerHTML =
     (r.img ? '<img src="' + r.img + '" alt="' + esc(r.name) + '" />' : '') +
-    '<div class="kb"><span>' + r.kcal + ' ккал</span><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span>' + r.time + ' мин</span></div>' +
-    '<div><b style="font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Надо купить</b>' +
+    '<div class="kb">' + (r.shake ? '<span class="pw">Протеин без вкуса ' + r.powder + ' г</span>' : '') + '<span>' + r.kcal + ' ккал</span><span>Б ' + r.p + '</span><span>Ж ' + r.f + '</span><span>У ' + r.c + '</span><span>' + r.time + ' мин</span></div>' +
+    '<div><b style="font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">' + (r.shake ? 'Ингредиенты на 1 порцию' : 'Надо купить') + '</b>' +
       '<div class="kb" style="margin-top:8px">' + r.ing.map(function(i){ return '<span>' + esc(i) + '</span>'; }).join('') + '</div></div>' +
     '<div class="steps">' + r.steps.map(function(s, i){
         return '<div class="step"><i>' + (i+1) + '</i><span>' + esc(s) + '</span></div>';
@@ -445,6 +479,7 @@ function openRecipe(id){
     '<div class="hint"><b>Совет:</b> ' + esc(r.hint) + '</div>' +
     '<button class="btn wide" type="button" onclick="openRate(' + r.id + ')">Я это готовил — оценить</button>';
   $('recipeModal').classList.add('on');
+  $('recipeModal').querySelector('.sheet').scrollTop = 0;
 }
 
 /* ---- оценка ---- */
@@ -458,7 +493,7 @@ $('starPick').addEventListener('click', function(e){
 });
 function openRate(id){
   rateId = id;
-  const r = RECIPES.find(function(x){ return x.id === id; });
+  const r = findR(id);
   const prev = ME.profile.cooked.filter(function(c){ return c.id === id; }).pop();
   rateStars = prev ? prev.stars : 5;
   $('rateTitle').textContent = r.name;
@@ -469,11 +504,12 @@ function openRate(id){
   $('rateModal').classList.add('on');
 }
 $('rateSave').onclick = function(){
-  const r = RECIPES.find(function(x){ return x.id === rateId; });
+  const r = findR(rateId);
   ME.profile.cooked.push({ id:r.id, name:r.name, kcal:r.kcal, stars:rateStars, note:$('rateNote').value.trim(), date:$('rateDate').value || today() });
   save(); $('rateModal').classList.remove('on');
-  renderRecipes(); renderHistory();
+  renderRecipes(); renderHistory(); if($('viewShakes').style.display !== 'none') renderShakes();
   toast('Добавил в историю');
+  achCheck();
 };
 
 /* ================= ГОТОВЫЙ ДЕНЬ ================= */
@@ -521,7 +557,7 @@ function buildDay(){
     '<div class="kpi"><b>' + tot.f + ' г</b><span>жиры</span></div>' +
     '<div class="kpi ' + (Math.abs(diff) <= 120 ? 'good' : '') + '"><b>' + (diff >= 0 ? '+' : '') + diff + '</b><span>к норме ' + norm.kcal + '</span></div>';
 }
-$('dayGo').onclick = buildDay;
+$('dayGo').onclick = function(){ buildDay(); ME.profile.daysBuilt = (ME.profile.daysBuilt || 0) + 1; save(); achCheck(); };
 
 /* ================= МОЙ ВЕС ================= */
 function sortedW(){
@@ -567,6 +603,7 @@ $('wSave').onclick = function(){
   ME.profile.weight = kg;
   save(); $('wKg').value = '';
   fillNorm(); renderWeight(); toast('Записал: ' + kg.toFixed(1) + ' кг');
+  achCheck();
 };
 
 function drawChart(){
@@ -708,6 +745,7 @@ function openEx(id){
     }).join('') + '</div>' +
     '<div class="hint"><b>Частая ошибка:</b> ' + esc(e.err) + '</div>';
   $('exModal').classList.add('on');
+  if(ME && ME.profile.exSeen.indexOf(id) < 0){ ME.profile.exSeen.push(id); save(); achCheck(); }
 }
 
 /* ================= ИСТОРИЯ ================= */
@@ -738,13 +776,238 @@ function delCooked(i){
   const item = c[i];
   const idx = ME.profile.cooked.indexOf(item);
   if(idx >= 0) ME.profile.cooked.splice(idx, 1);
-  save(); renderHistory(); renderRecipes(); toast('Удалил из истории');
+  save(); renderHistory(); renderRecipes(); toast('Удалил из истории'); achCheck(true);
 }
 $('wipe').onclick = function(){
   if(!confirm('Удалить весь прогресс: взвешивания и историю блюд?')) return;
   ME.profile.weights = []; ME.profile.cooked = [];
-  save(); renderAll(); toast('Данные очищены');
+  save(); renderAll(); toast('Данные очищены'); achCheck(true);
 };
+
+
+/* ================= ПРОФИЛЬ ================= */
+
+/* Стрик записи еды.
+   Дневника питания на сайте пока нет, поэтому здесь демо-данные (isMock: true).
+   Когда появится модуль записи еды, достаточно вызвать
+     FoodStreak.setDays(['2026-09-20', '2026-09-21', ...])   // даты, когда была запись
+   — текущий/лучший стрик посчитаются сами, виджет и достижения обновятся. */
+const FoodStreak = (function(){
+  function iso(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+  function shift(n){ const d = new Date(); d.setDate(d.getDate() - n); return iso(d); }
+  function calc(days){
+    const set = new Set(days);
+    let current = 0;
+    for(let i = set.has(shift(0)) ? 0 : 1; set.has(shift(i)); i++) current++;
+    const sorted = Array.from(set).sort();
+    let best = 0, run = 0, prev = null;
+    sorted.forEach(function(d){
+      const t = new Date(d + 'T00:00:00').getTime();
+      run = (prev !== null && Math.round((t - prev) / 864e5) === 1) ? run + 1 : 1;
+      best = Math.max(best, run); prev = t;
+    });
+    return { current: current, best: best };
+  }
+  // демо: записи за последние 4 дня + старая серия из 9 дней
+  const mockDays = [0,1,2,3].map(shift).concat([12,13,14,15,16,17,18,19,20].map(shift));
+  let state = Object.assign({ days: mockDays, isMock: true }, calc(mockDays));
+  return {
+    get: function(){ return state; },
+    week: function(){ // последние 7 дней, от старого к сегодняшнему
+      const set = new Set(state.days), out = [];
+      for(let i = 6; i >= 0; i--){ const d = new Date(); d.setDate(d.getDate() - i); out.push({ d: d, on: set.has(iso(d)) }); }
+      return out;
+    },
+    setDays: function(days){
+      state = Object.assign({ days: days.slice(), isMock: false }, calc(days));
+      renderStreak(); updateFab(); achCheck();
+    }
+  };
+})();
+
+const KIND_STAT = { 'без огня':'k_nofire', 'микроволновка':'k_micro', '1 сковорода':'k_pan', 'духовка':'k_oven', 'кастрюля':'k_pot' };
+
+/* вся статистика пользователя — из неё считаются достижения и блоки профиля */
+function achStats(){
+  const p = ME.profile, c = p.cooked;
+  const st = { cooks: c.length, fiveStars: 0, lowStars: 0, notes: 0, shakes: 0,
+    m_breakfast:0, m_lunch:0, m_dinner:0, m_snack:0, k_nofire:0, k_micro:0, k_pan:0, k_oven:0, k_pot:0 };
+  const per = {}, shakeIds = new Set();
+  c.forEach(function(x){
+    per[x.id] = (per[x.id] || 0) + 1;
+    if(x.stars >= 5) st.fiveStars++;
+    if(x.stars <= 2) st.lowStars++;
+    if(x.note) st.notes++;
+    const r = findR(x.id); if(!r) return;
+    r.meal.forEach(function(m){ st['m_' + m]++; });
+    if(KIND_STAT[r.kind]) st[KIND_STAT[r.kind]]++;
+    if(r.shake){ st.shakes++; shakeIds.add(r.id); }
+  });
+  st.unique = Object.keys(per).length;
+  st.maxRepeat = Math.max.apply(null, [0].concat(Object.values(per)));
+  st.shakesUnique = shakeIds.size;
+  st.favs = p.favs.length;
+  st.exSeen = p.exSeen.length;
+  GROUPS.slice(1).forEach(function(g){ st['grp_' + g] = 0; });
+  p.exSeen.forEach(function(id){ const e = EXERCISES.find(function(x){ return x.id === id; }); if(e) st['grp_' + e.group]++; });
+  const fs = FoodStreak.get();
+  st.streakBest = fs.isMock ? 0 : fs.best;   // демо-стрик не даёт достижений
+  const w = sortedW();
+  st.weighIns = w.length;
+  st.lost = w.length > 1 ? Math.max(0, w[0].kg - w[w.length-1].kg) : 0;
+  st.gained = w.length > 1 ? Math.max(0, w[w.length-1].kg - w[0].kg) : 0;
+  st.visitDays = p.visits.length;
+  st.normSaved = p.normSaved ? 1 : 0;
+  st.manualNorm = p.normSaved && p.normMode === 'manual' ? 1 : 0;
+  st.daysBuilt = p.daysBuilt || 0;
+  st.avg = c.length ? c.reduce(function(s, x){ return s + x.stars; }, 0) / c.length : 0;
+  return st;
+}
+
+/* полученные достижения хранятся в профиле — однажды заработанное не пропадает */
+function achCheck(silent){
+  if(!ME) return;
+  const st = achStats(), p = ME.profile;
+  if(!p.achDone) p.achDone = [];
+  const fresh = ACHIEVEMENTS.filter(function(a){ return p.achDone.indexOf(a.id) < 0 && (st[a.stat] || 0) >= a.goal; });
+  if(fresh.length){
+    fresh.forEach(function(a){ p.achDone.push(a.id); });
+    save();
+    if(!silent){
+      setTimeout(function(){
+        toast('🏆 ' + fresh[0].title + (fresh.length > 1 ? ' и ещё ' + (fresh.length - 1) : ''));
+      }, 1300);
+    }
+  }
+  updateFab();
+  if(profileOpen) renderProfile();
+}
+function achInit(){ achCheck(true); }
+
+const FIRE = '<svg viewBox="0 0 24 24"><path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2.2-4.8.3 1.6 1 2.6 2.1 3.1C11 9 10.8 6 12 3z"/></svg>';
+
+function updateFab(){
+  if(!ME) return;
+  $('fabAva').textContent = (ME.name || '?').trim().charAt(0).toUpperCase();
+  $('fabName').textContent = ME.name;
+  $('fabSub').textContent = 'Достижения ' + (ME.profile.achDone || []).length + '/100';
+  $('fabFire').innerHTML = FIRE + '<b>' + FoodStreak.get().current + '</b>';
+}
+
+let profileOpen = false, achCat = 'all';
+function openProfile(){
+  if(!ME) return;
+  profileOpen = true;
+  renderProfile();
+  $('pdrawer').classList.add('on');
+  $('pdrawer').setAttribute('aria-hidden', 'false');
+  document.documentElement.classList.add('noscroll');
+  $('pdPanel').scrollTop = 0;
+  setTimeout(function(){ $('pdClose').focus({ preventScroll: true }); }, 60);
+}
+function closeProfile(){
+  if(!profileOpen) return;
+  profileOpen = false;
+  $('pdrawer').classList.remove('on');
+  $('pdrawer').setAttribute('aria-hidden', 'true');
+  document.documentElement.classList.remove('noscroll');
+  $('pfab').focus({ preventScroll: true });
+}
+$('pfab').onclick = openProfile;
+$('pdClose').onclick = closeProfile;
+$('pdBack').onclick = closeProfile;
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && profileOpen && !document.querySelector('.modal.on')) closeProfile();
+}, true);
+
+function renderStreak(){
+  const fs = FoodStreak.get();
+  const days = ['вс','пн','вт','ср','чт','пт','сб'];
+  $('pdStreak').innerHTML =
+    '<div class="stk-main"><span class="stk-fire">' + FIRE + '</span>' +
+      '<div><b>' + fs.current + ' ' + plural(fs.current, 'день', 'дня', 'дней') + ' подряд</b>' +
+      '<span>записываешь приёмы пищи · рекорд ' + fs.best + '</span></div></div>' +
+    '<div class="stk-week">' + FoodStreak.week().map(function(x, i){
+      return '<div class="stk-day' + (x.on ? ' on' : '') + (i === 6 ? ' today' : '') + '"><i>' + (x.on ? FIRE : '') + '</i><span>' + days[x.d.getDay()] + '</span></div>';
+    }).join('') + '</div>' +
+    (fs.isMock ? '<p class="stk-note">Демо-данные: дневник питания скоро появится, и здесь будет твой настоящий стрик.</p>' : '');
+}
+
+function miniCard(r, extra){
+  return '<button type="button" class="pmini" onclick="openRecipe(' + r.id + ')">' +
+    '<span class="pmini-ph">' + foodThumb(r) + '</span>' +
+    '<span class="pmini-t"><b>' + esc(r.name) + '</b><em>' + extra + '</em></span></button>';
+}
+
+function renderProfile(){
+  const p = ME.profile, st = achStats();
+  $('pdAva').textContent = (ME.name || '?').trim().charAt(0).toUpperCase();
+  $('pdName').textContent = ME.name;
+  $('pdMail').textContent = KEY;
+  renderStreak();
+
+  const w = sortedW();
+  const wd = w.length > 1 ? +(w[w.length-1].kg - w[0].kg).toFixed(1) : null;
+  $('pdStats').innerHTML =
+    '<div class="kpi"><b>' + st.cooks + '</b><span>готовок</span></div>' +
+    '<div class="kpi"><b>' + st.unique + '</b><span>разных блюд</span></div>' +
+    '<div class="kpi"><b>' + (st.avg ? st.avg.toFixed(1) : '—') + '</b><span>средняя оценка</span></div>' +
+    '<div class="kpi"><b>' + st.visitDays + '</b><span>' + plural(st.visitDays, 'день', 'дня', 'дней') + ' на сайте</span></div>' +
+    '<div class="kpi"><b>' + st.exSeen + '<small>/' + EXERCISES.length + '</small></b><span>изучено упражнений</span></div>' +
+    '<div class="kpi ' + (wd === null ? '' : wd < 0 ? 'good' : '') + '"><b>' + (wd === null ? '—' : (wd > 0 ? '+' : '') + wd + ' кг') + '</b><span>вес с начала</span></div>';
+
+  // приготовленные: уникальные рецепты, последние сверху
+  const last = {}, cnt = {};
+  p.cooked.forEach(function(x){ cnt[x.id] = (cnt[x.id] || 0) + 1; if(!last[x.id] || x.date > last[x.id]) last[x.id] = x.date; });
+  const cookedIds = Object.keys(last).map(Number).sort(function(a, b){ return last[a] < last[b] ? 1 : -1; });
+  $('pdCookedN').textContent = cookedIds.length;
+  $('pdCooked').innerHTML = cookedIds.length ? cookedIds.map(function(id){
+    const r = findR(id); if(!r) return '';
+    return miniCard(r, cnt[id] + ' ' + plural(cnt[id], 'раз', 'раза', 'раз') + ' · ' + fmtDate(last[id]));
+  }).join('') : '<div class="empty">Отметь рецепт кнопкой «Оценить» — он появится здесь.</div>';
+
+  // избранное + лучшие по оценке
+  const rated = Object.keys(cnt).map(Number).filter(function(id){ return avgStars(id) >= 4; })
+    .sort(function(a, b){ return avgStars(b) - avgStars(a); });
+  const favIds = p.favs.slice().reverse().concat(rated.filter(function(id){ return p.favs.indexOf(id) < 0; }));
+  $('pdFavN').textContent = favIds.length;
+  $('pdFav').innerHTML = favIds.length ? favIds.map(function(id){
+    const r = findR(id); if(!r) return '';
+    const av = avgStars(id);
+    return miniCard(r, (p.favs.indexOf(id) >= 0 ? '<i class="pheart">' + HEART + '</i>' : '') + (av ? '<span class="stars">' + starsHtml(av) + '</span>' : 'в избранном'));
+  }).join('') : '<div class="empty">Нажми ♡ на карточке рецепта или поставь блюду 4–5 звёзд.</div>';
+
+  renderAch(st);
+}
+
+function renderAch(st){
+  const done = new Set(ME.profile.achDone || []);
+  $('pdAchN').textContent = done.size;
+  $('pdAchBar').style.width = done.size + '%';
+  $('pdAchCats').innerHTML = [{ id:'all', label:'Все' }].concat(ACH_CATS).map(function(c){
+    const n = c.id === 'all' ? done.size : ACHIEVEMENTS.filter(function(a){ return a.cat === c.id && done.has(a.id); }).length;
+    const t = c.id === 'all' ? 100 : ACHIEVEMENTS.filter(function(a){ return a.cat === c.id; }).length;
+    return '<button type="button" class="chip' + (achCat === c.id ? ' on' : '') + '" data-cat="' + c.id + '">' + c.label + ' <small>' + n + '/' + t + '</small></button>';
+  }).join('');
+  const list = ACHIEVEMENTS.filter(function(a){ return achCat === 'all' || a.cat === achCat; })
+    .map(function(a, i){ return { a: a, i: i, ok: done.has(a.id) }; })
+    .sort(function(x, y){ return (y.ok - x.ok) || (x.i - y.i); });   // полученные — первыми
+  $('pdAch').innerHTML = list.map(function(o){
+    const a = o.a, cur = Math.min(a.goal, Math.floor(st[a.stat] || 0));
+    const isStreak = a.cat === 'streak' && FoodStreak.get().isMock;
+    return '<div class="ach' + (o.ok ? ' ok' : ' lock') + '" title="' + esc(a.desc) + '">' +
+      '<div class="ach-ic">' + ACH_ICON[a.cat] + (o.ok ? '' : '<span class="ach-lock">' + ACH_ICON.lock + '</span>') + '</div>' +
+      '<b>' + esc(a.title) + '</b><p>' + esc(a.desc) + '</p>' +
+      (o.ok ? '<span class="ach-st">Получено</span>'
+        : (a.goal > 1 && !isStreak ? '<span class="ach-pg"><i style="width:' + (cur / a.goal * 100) + '%"></i></span><span class="ach-st">' + cur + ' / ' + a.goal + '</span>'
+          : '<span class="ach-st">' + (isStreak ? 'Скоро' : 'Заблокировано') + '</span>')) +
+    '</div>';
+  }).join('');
+}
+$('pdAchCats').addEventListener('click', function(e){
+  const b = e.target.closest('.chip'); if(!b) return;
+  achCat = b.dataset.cat; renderAch(achStats());
+});
 
 /* ================= init ================= */
 function renderAll(){ renderRecipes(); renderWeight(); renderGym(); renderHistory(); }

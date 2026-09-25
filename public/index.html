@@ -285,6 +285,7 @@
       <div class="seg rsub" id="rSub">
         <button type="button" data-v="all" class="on">Все рецепты</button>
         <button type="button" data-v="day">Готовый день</button>
+        <button type="button" data-v="shakes">Протеиновые коктейли</button>
       </div>
 
       <!-- вид: все рецепты -->
@@ -309,6 +310,19 @@
         </div>
         <div class="slots" id="daySlots"></div>
         <div class="kpis" id="dayTotal" style="margin-top:14px"></div>
+      </div>
+
+      <!-- вид: протеиновые коктейли -->
+      <div id="viewShakes" style="display:none">
+        <div class="daycard">
+          <div class="daycard-head">
+            <div>
+              <b>Протеиновые коктейли за 3–4 минуты</b>
+              <span>Везде обычный сывороточный протеин без вкуса — 1 мерная ложка ≈ 30 г. Вкус дают банан, ягоды, какао и другие простые продукты. Нужен только блендер.</span>
+            </div>
+          </div>
+        </div>
+        <div class="rgrid" id="shakeGrid"></div>
       </div>
     </section>
 
@@ -353,6 +367,51 @@
   </main>
 
   <nav class="tabbar" id="tabbar"></nav>
+
+  <!-- кнопка профиля: фиксирована в левом нижнем углу -->
+  <button class="pfab" id="pfab" type="button" aria-label="Открыть профиль" aria-haspopup="dialog" aria-controls="pdrawer">
+    <span class="ava" id="fabAva">M</span>
+    <span class="pfab-txt"><b id="fabName">Профиль</b><span id="fabSub">Достижения</span></span>
+    <span class="pfab-fire" id="fabFire"></span>
+  </button>
+
+  <!-- выезжающая панель профиля -->
+  <div class="pdrawer" id="pdrawer" aria-hidden="true">
+    <div class="pd-back" id="pdBack"></div>
+    <aside class="pd-panel" id="pdPanel" role="dialog" aria-modal="true" aria-labelledby="pdName">
+      <div class="pd-head">
+        <div class="me">
+          <div class="ava" id="pdAva">M</div>
+          <div><b id="pdName">Имя</b><span id="pdMail"></span></div>
+        </div>
+        <button class="x" type="button" id="pdClose" aria-label="Закрыть профиль">&times;</button>
+      </div>
+      <div class="pd-body">
+        <section class="pd-sec">
+          <h4>Стрик записи еды</h4>
+          <div class="stk" id="pdStreak"></div>
+        </section>
+        <section class="pd-sec">
+          <h4>Активность и прогресс</h4>
+          <div class="kpis pd-kpis" id="pdStats"></div>
+        </section>
+        <section class="pd-sec">
+          <h4>Приготовленные рецепты <small id="pdCookedN">0</small></h4>
+          <div class="pgrid" id="pdCooked"></div>
+        </section>
+        <section class="pd-sec">
+          <h4>Избранное и больше всего понравилось <small id="pdFavN">0</small></h4>
+          <div class="pgrid" id="pdFav"></div>
+        </section>
+        <section class="pd-sec">
+          <h4>Достижения <small><span id="pdAchN">0</span>/100</small></h4>
+          <div class="bar pd-achbar"><i id="pdAchBar" style="width:0;background:var(--lime)"></i></div>
+          <div class="chips pd-cats" id="pdAchCats"></div>
+          <div class="achgrid" id="pdAch"></div>
+        </section>
+      </div>
+    </aside>
+  </div>
 </div>
 
 <!-- ============ MODALS ============ -->
@@ -402,6 +461,7 @@
 
 
 <script src="static/data.js"></script>
+<script src="static/achievements.js"></script>
 <script src="static/path-fix.js"></script>
 <script src="static/app.js"></script>
 
