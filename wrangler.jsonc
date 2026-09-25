@@ -1,10 +1,17 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "forma-app",
-  "main": "public/_worker.js",
-  "compatibility_date": "2024-01-01",
+  // сервер: раздаёт сайт из public и обрабатывает POST /api/chat (ИИ-ментор)
+  "main": "worker/index.js",
+  "compatibility_date": "2025-06-01",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
+  },
+  "vars": {
+    // с каких сайтов разрешено обращаться к /api/chat (через запятую)
+    "ALLOWED_ORIGINS": "https://maks00716006.github.io",
+    "CHAT_MAX_TOKENS": "1024"
   }
+  // секрет с ключом Anthropic задаётся командой: npx wrangler secret put ANTHROPIC_API_KEY
 }

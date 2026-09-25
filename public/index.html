@@ -55,9 +55,10 @@
                     </button>
                   </div>
                 </div>
+                <label class="chk remember"><input type="checkbox" id="aRemember" checked /><i class="cbox" aria-hidden="true"></i><span>Запомнить меня</span></label>
                 <div class="err" id="authErr"></div>
                 <button class="btn wide" type="button" id="authGo">Войти</button>
-                <p class="aswitch mobile-only">Нет аккаунта? <a href="#" id="toSignupM">Создать</a></p>
+                <p class="aswitch mobile-only">Нет аккаунта? <a href="#" id="toSignupM" role="button">Создать аккаунт</a></p>
               </div>
             </div>
 
@@ -91,6 +92,7 @@
                     </button>
                   </div>
                 </div>
+                <label class="chk remember"><input type="checkbox" id="aRememberUp" checked /><i class="cbox" aria-hidden="true"></i><span>Запомнить меня</span></label>
                 <div class="err" id="authErrUp"></div>
                 <button class="btn wide" type="button" id="authGoUp">Продолжить</button>
                 <p class="aswitch mobile-only">Уже есть аккаунт? <a href="#" id="toSigninM">Войти</a></p>
@@ -361,7 +363,7 @@
 
       <div class="gsearch" id="rSearchWrap">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="rQ" type="search" autocomplete="off" placeholder="Поиск: курица, творог, банан, омлет…" aria-label="Поиск рецептов" />
+        <input id="rQ" type="search" autocomplete="off" placeholder="Курица, творог, омлет…" aria-label="Поиск рецептов" />
         <span class="gsearch-n" id="rQn"></span>
       </div>
 
@@ -418,7 +420,7 @@
       </div>
       <div class="gsearch">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="eQ" type="search" autocomplete="off" placeholder="Поиск: жим, присед, бицепс, спина…" aria-label="Поиск упражнений" />
+        <input id="eQ" type="search" autocomplete="off" placeholder="Жим, присед, бицепс…" aria-label="Поиск упражнений" />
         <span class="gsearch-n" id="eQn"></span>
       </div>
       <div class="chips" id="fGroup" style="margin-bottom:20px"></div>
@@ -435,6 +437,35 @@
     <span class="pfab-txt"><b id="fabName">Профиль</b><span id="fabSub">Достижения</span></span>
     <span class="pfab-fire" id="fabFire"></span>
   </button>
+
+  <!-- ИИ-ментор: кнопка справа внизу (слева — профиль) -->
+  <button class="chatfab" id="chatFab" type="button" aria-label="Открыть ИИ-ментора" aria-controls="chat"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span>ИИ-ментор</span></button>
+  <section class="chat" id="chat" role="dialog" aria-modal="false" aria-labelledby="chatTitle" aria-hidden="true">
+    <header class="chat-h">
+      <span class="chat-ava"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
+      <div class="chat-t"><b id="chatTitle">ИИ-ментор</b><span><i class="chat-dot"></i><em id="chatStatus">онлайн</em> · поддержка и советы</span></div>
+      <button type="button" class="chat-ib" id="chatGear" aria-label="Настройки подключения"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button type="button" class="chat-ib" id="chatClear" aria-label="Очистить переписку"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+      <button type="button" class="chat-ib" id="chatClose" aria-label="Закрыть чат"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="chat-cfg" id="chatCfg" hidden>
+      <div class="seg" id="chatMode"><button type="button" data-v="server" class="on">Сервер сайта</button><button type="button" data-v="key">Свой ключ</button></div>
+      <div id="chatEpRow"><div class="field"><label for="chatEp">Адрес /api/chat</label><input id="chatEp" type="url" autocomplete="off" /></div>
+        <p class="foot">Обычно пусто: адрес берётся из static/config.js. Ключ Anthropic хранится на сервере.</p></div>
+      <div id="chatKeyRow" style="display:none">
+        <div class="field"><label for="chatKey">Ключ Anthropic API</label><input id="chatKey" type="password" autocomplete="off" placeholder="sk-ant-…" /></div>
+        <div class="field"><label for="chatModel">Модель (необязательно)</label><input id="chatModel" type="text" autocomplete="off" placeholder="claude-sonnet-5" /></div>
+        <p class="foot">Только для личного использования: ключ хранится в этом браузере и отправляется напрямую в Anthropic.</p></div>
+      <button class="btn sm" type="button" id="chatCfgSave">Сохранить</button>
+    </div>
+    <div class="chat-log" id="chatLog" aria-live="polite"></div>
+    <div class="chat-sugg chips" id="chatSugg"></div>
+    <form class="chat-in" id="chatForm">
+      <textarea id="chatQ" rows="1" maxlength="4000" placeholder="Напиши сообщение…" aria-label="Сообщение"></textarea>
+      <button type="submit" class="chat-send" id="chatSend" aria-label="Отправить"></button>
+    </form>
+    <p class="chat-disc">ИИ может ошибаться. Это не замена врачу или психологу.</p>
+  </section>
 
   <!-- выезжающая панель профиля -->
   <div class="pdrawer" id="pdrawer" aria-hidden="true">
@@ -606,6 +637,7 @@
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
             <input id="fQ" type="search" autocomplete="off" placeholder="Гречка, творог 5%, банан…" aria-label="Название продукта или блюда" />
           </div>
+          <p class="fnotfound" id="fNotFound" style="display:none"></p>
           <div class="fres-list" id="fRes"></div>
           <div class="foff">
             <button class="btn sm ghost" type="button" id="fOffBtn"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg>Найти в магазинных продуктах</button>
@@ -619,8 +651,10 @@
         <div class="fpane" id="fPane-barcode" style="display:none">
           <div class="bcbox" id="bcBox">
             <video id="bcVideo" playsinline muted></video>
+            <div class="bcshade"></div>
             <div class="bcframe"><i></i><i></i><i></i><i></i><span class="bcline"></span></div>
-            <div class="bcidle"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg><span>Российские товары ищутся в OpenFoodFacts с русской локалью</span></div>
+            <button type="button" class="bctorch" id="bcTorch" style="display:none" aria-label="Фонарик"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></button>
+            <div class="bcidle"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg><span>Наведи рамку на штрих-код — он распознается сам.<br>Товары ищутся в OpenFoodFacts (в т.ч. российские)</span></div>
           </div>
           <div class="bcbtns">
             <button class="btn" type="button" id="bcStart"><svg viewBox="0 0 24 24" class="bi"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Включить камеру</button>
@@ -629,7 +663,7 @@
           </div>
           <p class="bcstatus" id="bcStatus">Нажми «Включить камеру» и наведи на штрих-код на упаковке.</p>
           <div class="bcmanual">
-            <input id="bcCode" type="text" inputmode="numeric" maxlength="14" placeholder="4607001771265" aria-label="Цифры штрих-кода" />
+            <input id="bcCode" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="14" placeholder="Цифры под штрих-кодом" aria-label="Цифры штрих-кода" />
             <button class="btn sm" type="button" id="bcFind">Найти</button>
           </div>
         </div>
@@ -747,6 +781,8 @@
 <script src="static/diary.js"></script>
 <script src="static/quotesData.js"></script>
 <script src="static/quotes.js"></script>
+<script src="static/config.js"></script>
+<script src="static/chat.js"></script>
 <script src="static/path-fix.js"></script>
 <script src="static/app.js"></script>
 

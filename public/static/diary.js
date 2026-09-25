@@ -244,7 +244,11 @@ function renderWater(){
   $('dWaterSub').textContent = ml >= goal ? 'Цель на день выполнена 🎉' : 'Осталось ' + (goal - ml).toLocaleString('ru-RU') + ' мл · ~' + Math.ceil((goal - ml) / 250) + ' ' + plural(Math.ceil((goal - ml) / 250), 'стакан', 'стакана', 'стаканов');
   $('dWaterFill').style.width = Math.min(100, ml / goal * 100) + '%';
   let g = '';
-  for(let i = 0; i < n; i++) g += '<button type="button" class="glass' + (i < full ? ' on' : '') + '" data-glass="' + i + '" aria-label="Стакан ' + (i+1) + '"><i></i></button>';
+  // на сенсорных экранах стаканы — индикатор (управление кнопками −/+250 размером 44px), на ПК — кликабельные
+  const tap = !window.matchMedia('(max-width:900px), (pointer:coarse)').matches;
+  for(let i = 0; i < n; i++) g += tap
+    ? '<button type="button" class="glass' + (i < full ? ' on' : '') + '" data-glass="' + i + '" aria-label="Стакан ' + (i+1) + '"><i></i></button>'
+    : '<span class="glass' + (i < full ? ' on' : '') + '" aria-hidden="true"><i></i></span>';
   $('dGlasses').innerHTML = g;
   $('dWaterCard').classList.toggle('done', ml >= goal);
 }
@@ -263,6 +267,7 @@ function openFoodModal(meal){
   foodTab('search');
   showPortion(null);
   $('fQ').value = '';
+  $('fNotFound').style.display = 'none';
   renderLocalResults('');
   $('fOffRes').innerHTML = '';
   $('fOffStatus').textContent = '';
@@ -459,134 +464,270 @@ function addManual(){
   closeFoodModal();
 }
 
-/* ================= СКАНЕР ШТРИХ-КОДОВ =================
-   1) Встроенный BarcodeDetector (Chrome/Android, Edge, Samsung Internet) — быстрый и без библиотек.
-   2) Иначе (Safari/iPhone, Firefox) — библиотека ZXing, подгружается с CDN только при первом скане.
-   Поиск товара — в OpenFoodFacts с русской локалью (lc=ru, cc=ru), российские EAN начинаются с 460–469. */
+/* ================= СКАНЕР ШТРИХ-КОДОВ (v2) =================
+   Движки распознавания (выбирается первый доступный):
+     1) встроенный BarcodeDetector — Chrome на Android, Samsung Internet, Edge: быстрый, на ML-модели телефона;
+     2) BarcodeDetector-полифилл на WASM-сборке zxing-cpp (пакет barcode-detector) — iPhone/Safari, Firefox, ПК;
+        грузится с CDN только при первом скане (~1 МБ, дальше из кэша);
+     3) запасной — JS-версия ZXing.
+   Камера: задняя по умолчанию (для iPhone с несколькими объективами выбирается основной, а не широкоугольный),
+   высокое разрешение, непрерывный автофокус и лёгкий зум, если телефон их поддерживает, фонарик.
+   Распознаётся только центральная зона кадра под рамкой — быстрее и меньше ложных срабатываний.
+   Код принимается после двух одинаковых чтений подряд и проверки контрольной цифры EAN. */
+const SCAN_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];
 function eanValid(code){
   if(!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
   const d = code.split('').map(Number), chk = d.pop();
   const sum = d.reverse().reduce(function(s, v, i){ return s + v * (i % 2 === 0 ? 3 : 1); }, 0);
   return (10 - sum % 10) % 10 === chk;
 }
-const Scanner = {
-  stream:null, loop:null, detector:null, zreader:null, busy:false,
-  loadZXing: function(){
-    if(window.ZXing) return Promise.resolve(window.ZXing);
-    const urls = ['https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
-                  'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js'];
-    return urls.reduce(function(p, u){
-      return p.catch(function(){ return new Promise(function(ok, bad){
-        const s = document.createElement('script'); s.src = u; s.async = true;
-        s.onload = function(){ window.ZXing ? ok(window.ZXing) : bad(new Error('no ZXing')); };
-        s.onerror = function(){ bad(new Error('load')); };
-        document.head.appendChild(s);
-      }); });
-    }, Promise.reject());
-  },
-  zxingReader: async function(){
-    const Z = await this.loadZXing();
+function loadScript(urls){
+  return urls.reduce(function(p, u){
+    return p.catch(function(){ return new Promise(function(ok, bad){
+      const s = document.createElement('script'); s.src = u; s.async = true; s.crossOrigin = 'anonymous';
+      s.onload = ok; s.onerror = function(){ s.remove(); bad(new Error('load ' + u)); };
+      document.head.appendChild(s);
+    }); });
+  }, Promise.reject());
+}
+const ScanEngine = {
+  kind:null, det:null,
+  get: async function(){
+    if(this.det) return this.det;
+    // 1. встроенный
+    if('BarcodeDetector' in window){
+      try {
+        const sup = await window.BarcodeDetector.getSupportedFormats();
+        const f = SCAN_FORMATS.filter(function(x){ return sup.indexOf(x) >= 0; });
+        if(f.length){ this.det = new window.BarcodeDetector({ formats:f }); this.kind = 'native'; return this.det; }
+      } catch(e){}
+    }
+    // 2. WASM-полифилл (zxing-cpp)
+    const esm = ['https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/pure.min.js',
+                 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es/pure.min.js',
+                 'https://unpkg.com/barcode-detector@2/dist/es/pure.min.js'];
+    for(let i = 0; i < esm.length; i++){
+      try {
+        const m = await import(esm[i]);
+        const BD = m.BarcodeDetector || (m.default && m.default.BarcodeDetector);
+        if(BD){ this.det = new BD({ formats:SCAN_FORMATS }); this.kind = 'wasm'; return this.det; }
+      } catch(e){}
+    }
+    // 3. JS ZXing
+    await loadScript(['https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
+                      'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js']);
+    const Z = window.ZXing;
     const hints = new Map();
     hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E]);
     hints.set(Z.DecodeHintType.TRY_HARDER, true);
-    return new Z.BrowserMultiFormatReader(hints);
+    const reader = new Z.MultiFormatReader(); reader.setHints(hints);
+    this.det = { detect: async function(canvas){
+      try {
+        const src = new Z.HTMLCanvasElementLuminanceSource(canvas);
+        const r = reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(src)));
+        return [{ rawValue:r.getText() }];
+      } catch(e){ return []; }
+    } };
+    this.kind = 'zxing';
+    return this.det;
+  }
+};
+
+const Scanner = {
+  stream:null, track:null, running:false, busy:false, frameId:null, cv:null, ctx:null,
+  last:'', lastAt:0, t0:0, torchOn:false, hintLevel:0,
+  canvas: function(){
+    if(!this.cv){ this.cv = document.createElement('canvas'); this.ctx = this.cv.getContext('2d', { willReadFrequently:true }); }
+    return this.cv;
   },
-  nativeDetector: async function(){
-    if(!('BarcodeDetector' in window)) return null;
+  pickBackCamera: async function(){
+    // у iPhone/многокамерных Android: берём основную заднюю, а не «ultra wide» (она не фокусируется вблизи)
     try {
-      const sup = await BarcodeDetector.getSupportedFormats();
-      const f = ['ean_13','ean_8','upc_a','upc_e'].filter(function(x){ return sup.indexOf(x) >= 0; });
-      return f.length ? new BarcodeDetector({ formats:f }) : null;
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(function(d){ return d.kind === 'videoinput'; });
+      const back = devs.filter(function(d){ return /back|rear|environment|задн|тыл/i.test(d.label); });
+      const main = back.filter(function(d){ return !/ultra|wide|широк|tele|zoom|depth|macro/i.test(d.label); });
+      return (main[0] || back[back.length - 1] || null);
     } catch(e){ return null; }
   },
   start: async function(){
-    const v = $('bcVideo');
+    if(this.running) return;
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      bcStatus('Камера недоступна в этом браузере. Введи цифры штрих-кода вручную или загрузи фото.', 'warn'); return;
+      bcStatus('Камера недоступна в этом браузере. Введи цифры под штрих-кодом или сфоткай его.', 'warn'); return;
     }
+    if(!window.isSecureContext){ bcStatus('Камера работает только по https. Введи код вручную.', 'warn'); return; }
+    $('bcStart').disabled = true;
     bcStatus('<span class="spin"></span> Включаю камеру…');
+    const base = { width:{ ideal:1920 }, height:{ ideal:1080 }, frameRate:{ ideal:30 } };
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } }, audio:false });
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:Object.assign({ facingMode:{ ideal:'environment' } }, base) });
+      // после разрешения видны названия камер — переключаемся на основную заднюю, если выбрана не она
+      const cam = await this.pickBackCamera();
+      const cur = this.stream.getVideoTracks()[0].getSettings().deviceId;
+      if(cam && cam.deviceId && cam.deviceId !== cur){
+        try {
+          const s2 = await navigator.mediaDevices.getUserMedia({ audio:false, video:Object.assign({ deviceId:{ exact:cam.deviceId } }, base) });
+          this.stream.getTracks().forEach(function(t){ t.stop(); }); this.stream = s2;
+        } catch(e){}
+      }
     } catch(e){
-      bcStatus(e.name === 'NotAllowedError' ? 'Нет доступа к камере. Разреши его в настройках браузера или введи код вручную.' : 'Не удалось включить камеру. Введи код вручную или загрузи фото.', 'warn');
+      $('bcStart').disabled = false;
+      bcStatus(e.name === 'NotAllowedError' ? 'Нет доступа к камере — разреши его в настройках браузера или введи код вручную.'
+             : e.name === 'NotFoundError' ? 'Камера не найдена. Введи цифры под штрих-кодом вручную.'
+             : 'Не удалось включить камеру. Введи код вручную или сфоткай штрих-код.', 'warn');
       return;
     }
-    v.srcObject = this.stream; v.setAttribute('playsinline', ''); v.muted = true;
-    await v.play().catch(function(){});
+    this.track = this.stream.getVideoTracks()[0];
+    await this.tuneCamera();
+    const v = $('bcVideo');
+    v.setAttribute('playsinline', ''); v.muted = true; v.srcObject = this.stream;
+    try { await v.play(); } catch(e){}
     $('bcBox').classList.add('live');
-    $('bcStart').style.display = 'none'; $('bcStop').style.display = '';
-    const self = this;
-    this.detector = await this.nativeDetector();
-    if(this.detector){
-      bcStatus('Наведи камеру на штрих-код — распознаю автоматически.');
-      const tick = async function(){
-        if(!self.stream) return;
-        if(!self.busy && v.readyState >= 2){
-          self.busy = true;
-          try { const r = await self.detector.detect(v); const hit = r.find(function(x){ return eanValid(x.rawValue); }); if(hit){ self.found(hit.rawValue); return; } } catch(e){}
-          self.busy = false;
-        }
-        self.loop = setTimeout(tick, 180);
-      };
-      tick();
-    } else {
-      bcStatus('<span class="spin"></span> Загружаю сканер…');
+    $('bcStart').style.display = 'none'; $('bcStart').disabled = false; $('bcStop').style.display = '';
+    bcStatus('<span class="spin"></span> Загружаю распознавание…');
+    try { await ScanEngine.get(); }
+    catch(e){ this.stop(); bcStatus('Сканер не загрузился — проверь интернет. Пока можно ввести цифры под штрих-кодом.', 'warn'); return; }
+    this.running = true; this.t0 = Date.now(); this.last = ''; this.hintLevel = 0;
+    bcStatus('Идёт поиск… Наведи рамку на штрих-код');
+    this.loop();
+  },
+  tuneCamera: async function(){
+    const t = this.track; if(!t || !t.getCapabilities) { $('bcTorch').style.display = 'none'; return; }
+    const c = t.getCapabilities(), adv = {};
+    if(c.focusMode && c.focusMode.indexOf('continuous') >= 0) adv.focusMode = 'continuous';
+    if(c.exposureMode && c.exposureMode.indexOf('continuous') >= 0) adv.exposureMode = 'continuous';
+    if(c.whiteBalanceMode && c.whiteBalanceMode.indexOf('continuous') >= 0) adv.whiteBalanceMode = 'continuous';
+    // лёгкий зум: можно держать телефон подальше — камера сфокусируется, а код будет крупным
+    if(c.zoom && c.zoom.max >= 1.6) adv.zoom = Math.min(c.zoom.max, Math.max(c.zoom.min || 1, 1.6));
+    if(Object.keys(adv).length){ try { await t.applyConstraints({ advanced:[adv] }); } catch(e){} }
+    $('bcTorch').style.display = c.torch ? '' : 'none';
+    this.torchOn = false; $('bcTorch').classList.remove('on');
+  },
+  toggleTorch: async function(){
+    if(!this.track) return;
+    this.torchOn = !this.torchOn;
+    try { await this.track.applyConstraints({ advanced:[{ torch:this.torchOn }] }); $('bcTorch').classList.toggle('on', this.torchOn); }
+    catch(e){ this.torchOn = false; }
+  },
+  loop: function(){
+    const self = this, v = $('bcVideo');
+    const next = function(){
+      if(!self.running) return;
+      if(v.requestVideoFrameCallback) self.frameId = v.requestVideoFrameCallback(function(){ setTimeout(tick, 60); });
+      else self.frameId = setTimeout(tick, 110);
+    };
+    const tick = async function(){
+      if(!self.running) return;
+      if(self.busy || v.readyState < 2 || !v.videoWidth){ next(); return; }
+      self.busy = true;
       try {
-        this.zreader = await this.zxingReader();
-        bcStatus('Наведи камеру на штрих-код — распознаю автоматически.');
-        this.zreader.decodeFromStream(this.stream, v, function(res){
-          if(res && eanValid(res.getText())) self.found(res.getText());
-        });
-      } catch(e){
-        bcStatus('Сканер не загрузился. Введи цифры под штрих-кодом вручную.', 'warn');
-      }
+        // центральная зона кадра (как рамка на экране): 80% ширины × 45% высоты, уменьшаем до ~960px
+        const vw = v.videoWidth, vh = v.videoHeight;
+        const sw = Math.round(vw * .8), sh = Math.round(vh * .45);
+        const sx = Math.round((vw - sw) / 2), sy = Math.round((vh - sh) / 2);
+        const k = Math.min(1, 960 / sw);
+        const cv = self.canvas(); cv.width = Math.round(sw * k); cv.height = Math.round(sh * k);
+        self.ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+        const res = await ScanEngine.det.detect(cv);
+        const hit = (res || []).map(function(r){ return String(r.rawValue || '').replace(/\D/g, ''); }).find(eanValid);
+        if(hit){
+          const now = Date.now();
+          // два одинаковых чтения подряд (для встроенного детектора хватает одного)
+          if(ScanEngine.kind === 'native' || (hit === self.last && now - self.lastAt < 1500)){ self.found(hit); return; }
+          self.last = hit; self.lastAt = now;
+          bcStatus('Вижу код — держи ровно…');
+        } else {
+          self.hint(cv);
+        }
+      } catch(e){}
+      self.busy = false;
+      next();
+    };
+    next();
+  },
+  hint: function(cv){
+    const t = Date.now() - this.t0;
+    // яркость центральной зоны — если темно, подсказываем свет/фонарик
+    let dark = false;
+    if(t > 2500 && t % 5 < 2){
+      try {
+        const d = this.ctx.getImageData(0, 0, cv.width, cv.height).data; let sum = 0, n = 0;
+        for(let i = 0; i < d.length; i += 64){ sum += d[i] * .3 + d[i+1] * .59 + d[i+2] * .11; n++; }
+        dark = sum / n < 55;
+      } catch(e){}
     }
+    const lvl = dark ? 3 : t > 12000 ? 2 : t > 5000 ? 1 : 0;
+    if(lvl === this.hintLevel) return;
+    this.hintLevel = lvl;
+    bcStatus([
+      'Идёт поиск… Наведи рамку на штрих-код',
+      'Подноси ближе — штрих-код должен занять почти всю рамку',
+      'Не получается? Держи телефон ровно, без бликов — или введи цифры ниже',
+      'Слишком темно — включи фонарик ' + ($('bcTorch').style.display === 'none' ? 'или добавь света' : 'кнопкой ⚡')
+    ][lvl]);
   },
   stop: function(){
-    clearTimeout(this.loop); this.busy = false;
-    if(this.zreader){ try { this.zreader.reset(); } catch(e){} this.zreader = null; }
-    if(this.stream){ this.stream.getTracks().forEach(function(t){ t.stop(); }); this.stream = null; }
-    const v = $('bcVideo'); if(v) v.srcObject = null;
-    if($('bcBox')){ $('bcBox').classList.remove('live'); $('bcStart').style.display = ''; $('bcStop').style.display = 'none'; }
+    this.running = false; this.busy = false;
+    const v = $('bcVideo');
+    if(this.frameId != null){ if(v && v.cancelVideoFrameCallback) try { v.cancelVideoFrameCallback(this.frameId); } catch(e){} clearTimeout(this.frameId); this.frameId = null; }
+    if(this.stream){ this.stream.getTracks().forEach(function(t){ t.stop(); }); this.stream = null; this.track = null; }
+    if(v) v.srcObject = null;
+    if($('bcBox')){ $('bcBox').classList.remove('live', 'hit'); $('bcStart').style.display = ''; $('bcStart').disabled = false; $('bcStop').style.display = 'none'; $('bcTorch').style.display = 'none'; }
   },
   found: function(code){
-    this.stop();
+    $('bcBox').classList.add('hit');
     if(navigator.vibrate) navigator.vibrate(60);
+    setTimeout(this.stop.bind(this), 350);
     $('bcCode').value = code;
     lookupBarcode(code);
   },
   fromImage: async function(file){
     bcStatus('<span class="spin"></span> Ищу штрих-код на фото…');
     try {
-      const det = await this.nativeDetector();
-      if(det){
-        const bmp = await createImageBitmap(file);
-        const r = await det.detect(bmp); const hit = r.find(function(x){ return eanValid(x.rawValue); });
-        if(hit){ this.found(hit.rawValue); return; }
-      } else {
-        const reader = await this.zxingReader();
-        const url = URL.createObjectURL(file);
-        try { const res = await reader.decodeFromImageUrl(url); if(res && eanValid(res.getText())){ this.found(res.getText()); return; } }
-        catch(e){} finally { URL.revokeObjectURL(url); }
+      const det = await ScanEngine.get();
+      const bmp = await createImageBitmap(file);
+      // полное фото и увеличенная середина — на случай мелкого кода
+      const cv = this.canvas(), tries = [[0, 0, bmp.width, bmp.height], [bmp.width * .15, bmp.height * .25, bmp.width * .7, bmp.height * .5]];
+      for(let i = 0; i < tries.length; i++){
+        const r = tries[i], k = Math.min(1, 1400 / r[2]);
+        cv.width = Math.round(r[2] * k); cv.height = Math.round(r[3] * k);
+        this.ctx.drawImage(bmp, r[0], r[1], r[2], r[3], 0, 0, cv.width, cv.height);
+        const res = await det.detect(cv);
+        const hit = (res || []).map(function(x){ return String(x.rawValue || '').replace(/\D/g, ''); }).find(eanValid);
+        if(hit){ $('bcCode').value = hit; lookupBarcode(hit); return; }
       }
-      bcStatus('На фото не нашёл штрих-код. Сфоткай ближе и ровнее или введи цифры вручную.', 'warn');
-    } catch(e){ bcStatus('Не получилось прочитать фото. Введи цифры вручную.', 'warn'); }
+      bcStatus('На фото штрих-код не читается. Сфоткай ближе и без бликов — или введи цифры ниже.', 'warn');
+    } catch(e){ bcStatus('Не получилось прочитать фото. Введи цифры под штрих-кодом.', 'warn'); }
   }
 };
 function bcStatus(html, kind){ const el = $('bcStatus'); el.innerHTML = html; el.className = 'bcstatus' + (kind ? ' ' + kind : ''); }
+let bcLookupBusy = false;
 async function lookupBarcode(code){
   code = String(code || '').replace(/\D/g, '');
-  if(!eanValid(code)){ bcStatus('Проверь цифры: это не похоже на штрих-код EAN-13/EAN-8 (контрольная цифра не сходится).', 'warn'); return; }
-  bcStatus('<span class="spin"></span> Ищу товар ' + code + (/^46\d/.test(code) ? ' (российский штрих-код)' : '') + '…');
+  if(!code){ bcStatus('Введи цифры под штрих-кодом.', 'warn'); $('bcCode').focus(); return; }
+  if(!eanValid(code)){ bcStatus('Проверь цифры: это не штрих-код EAN-13/EAN-8 — контрольная цифра не сходится.', 'warn'); return; }
+  if(bcLookupBusy) return;
+  bcLookupBusy = true; $('bcFind').disabled = true;
+  bcStatus('<span class="spin"></span> Ищу товар ' + code + (/^46\d/.test(code) ? ' (российский)' : '') + '…');
   try {
     const p = await OFF.byBarcode(code);
-    if(p){ bcStatus('Нашёл: ' + esc(p.name), 'ok'); showPortion(p); return; }
-    bcStatus('Товара ' + code + ' пока нет в открытой базе OpenFoodFacts. Внеси КБЖУ с упаковки — один раз, дальше он будет в «недавнем».', 'warn');
-    $('fmCode').value = code; $('fmName').value = '';
-    setTimeout(function(){ foodTab('manual'); }, 900);
+    if(p){ bcStatus('Нашёл: ' + esc(p.name), 'ok'); Scanner.stop(); showPortion(p); return; }
+    barcodeNotFound(code);
   } catch(e){
-    bcStatus(e.message === 'rate' ? 'Слишком много сканов подряд — подожди минуту.' : 'База товаров не ответила. Проверь интернет и попробуй ещё раз.', 'warn');
-  }
+    if(e.message === 'rate'){ bcStatus('Слишком много сканов подряд — подожди минуту.', 'warn'); }
+    else { barcodeNotFound(code, true); }
+  } finally { bcLookupBusy = false; $('bcFind').disabled = false; }
+}
+/* товара нет в базе (или база не ответила) — не ошибка: аккуратно переводим в текстовый поиск */
+function barcodeNotFound(code, offline){
+  Scanner.stop();
+  toast(offline ? 'База не ответила — найди товар по названию' : 'Товар не найден, попробуйте ввести вручную');
+  foodTab('search');
+  $('fNotFound').innerHTML = (offline ? 'База товаров сейчас недоступна.' : 'Штрих-кода <b>' + code + '</b> пока нет в открытой базе.') +
+    ' Введи название продукта — или <button type="button" class="linkbtn" id="fNfManual">добавь свой с этим штрих-кодом</button>.';
+  $('fNotFound').style.display = '';
+  $('fNfManual').onclick = function(){ $('fmCode').value = code; $('fmName').value = $('fQ').value; foodTab('manual'); };
+  $('fQ').value = ''; renderLocalResults('');
+  setTimeout(function(){ $('fQ').focus(); }, 60);
 }
 
 /* ================= РАСПОЗНАВАНИЕ ЕДЫ ПО ФОТО (Vision AI) =================
@@ -879,7 +1020,7 @@ function diaryInit(){
   // модалка еды
   segInit('fMealSeg', function(v){ fMealSel = v; updatePortion(); const b = $('aiAdd'); if(b) b.textContent = 'Добавить в «' + MEALS.find(function(m){ return m.id === v; }).label + '»'; });
   segInit('fTabs', foodTab);
-  $('fQ').addEventListener('input', function(){ renderLocalResults(this.value); $('fOffRes').innerHTML = ''; $('fOffStatus').textContent = ''; });
+  $('fQ').addEventListener('input', function(){ if(this.value) $('fNotFound').style.display = 'none'; renderLocalResults(this.value); $('fOffRes').innerHTML = ''; $('fOffStatus').textContent = ''; });
   $('fQ').addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); if(fLocalList.length && !e.shiftKey && this.value.trim()) showPortion(fLocalList[0]); else offSearch(); } });
   $('fOffBtn').onclick = offSearch;
   $('foodModal').addEventListener('click', function(e){
@@ -904,6 +1045,8 @@ function diaryInit(){
   // штрих-код
   $('bcStart').onclick = function(){ Scanner.start(); };
   $('bcStop').onclick = function(){ Scanner.stop(); bcStatus('Камера выключена.'); };
+  $('bcTorch').onclick = function(){ Scanner.toggleTorch(); };
+  document.addEventListener('visibilitychange', function(){ if(document.hidden && Scanner.running){ Scanner.stop(); bcStatus('Камера выключена — вкладка была свёрнута.'); } });
   $('bcFind').onclick = function(){ lookupBarcode($('bcCode').value); };
   $('bcCode').addEventListener('keydown', function(e){ if(e.key === 'Enter') lookupBarcode(this.value); });
   $('bcFile').addEventListener('change', function(){ if(this.files[0]) Scanner.fromImage(this.files[0]); this.value = ''; });

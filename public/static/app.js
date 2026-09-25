@@ -14,7 +14,77 @@ let ME = null;    // { name, pass, profile }
 
 function save(){ if(!KEY) return; USERS[KEY] = ME; writeUsers(USERS); }
 function today(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
-function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(function(){ el.classList.remove('on'); }, 2200); }
+function toast(t){
+  const el = $('toast'); el.textContent = t;
+  // при открытом окне на телефоне тост уходит наверх, чтобы не закрывать кнопки внизу окна
+  el.classList.toggle('top', (!!document.querySelector('.modal.on') || (typeof Chat !== 'undefined' && Chat.isOpen())) && window.innerWidth <= 700);
+  el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(function(){ el.classList.remove('on'); }, 2200);
+}
+/* мгновенный отклик кнопки: блокируем от двойного нажатия и показываем спиннер */
+function busy(btn, on){ if(!btn) return; btn.classList.toggle('busy', on); btn.disabled = on; btn.setAttribute('aria-busy', on ? 'true' : 'false'); }
+/* тяжёлую работу запускаем после того, как браузер успел отрисовать спиннер */
+function afterPaint(fn){ requestAnimationFrame(function(){ setTimeout(fn, 0); }); }
+
+/* ---------- сессия и «Запомнить меня» ----------
+   Аккаунты хранятся в этом браузере (сервера у сайта нет). При входе создаётся случайный
+   токен сессии: с «Запомнить меня» — в localStorage на 30 дней (продлевается при каждом заходе),
+   без — в sessionStorage (до закрытия вкладки). Пароли хранятся как SHA-256 с солью. */
+const SESSION_DAYS = 30;
+function randHex(n){
+  const a = new Uint8Array(n);
+  if(window.crypto && crypto.getRandomValues) crypto.getRandomValues(a); else for(let i = 0; i < n; i++) a[i] = Math.random() * 256 | 0;
+  return Array.prototype.map.call(a, function(b){ return b.toString(16).padStart(2, '0'); }).join('');
+}
+function readSession(){
+  const get = function(store, remember){
+    try {
+      const v = store.getItem(LSS); if(!v) return null;
+      if(v.charAt(0) !== '{') return { k:v, legacy:true, remember:true };   // старый формат: просто логин
+      const o = JSON.parse(v); o.remember = remember; return o;
+    } catch(e){ return null; }
+  };
+  return get(sessionStorage, false) || get(localStorage, true);
+}
+function writeSession(key, remember){
+  const u = USERS[key], now = Date.now();
+  const tok = randHex(16), exp = now + (remember ? SESSION_DAYS * 864e5 : 12 * 36e5);
+  u.toks = (u.toks || []).filter(function(x){ return x.exp > now; }).slice(-4);
+  u.toks.push({ t:tok, exp:exp });
+  writeUsers(USERS);
+  const data = JSON.stringify({ k:key, t:tok, exp:exp });
+  try {
+    (remember ? localStorage : sessionStorage).setItem(LSS, data);
+    (remember ? sessionStorage : localStorage).removeItem(LSS);
+  } catch(e){}
+}
+function clearSession(){
+  const s = readSession();
+  if(s && s.t && USERS[s.k] && USERS[s.k].toks){ USERS[s.k].toks = USERS[s.k].toks.filter(function(x){ return x.t !== s.t; }); writeUsers(USERS); }
+  try { localStorage.removeItem(LSS); sessionStorage.removeItem(LSS); } catch(e){}
+}
+function validSession(){
+  const s = readSession(); if(!s) return null;
+  const u = USERS[s.k]; if(!u) return null;
+  if(s.legacy) return { k:s.k, remember:true };
+  const tk = (u.toks || []).find(function(x){ return x.t === s.t; });
+  if(!tk || tk.exp < Date.now()) return null;
+  return { k:s.k, remember:s.remember };
+}
+async function hashPass(pass, salt){
+  if(!(window.crypto && crypto.subtle)) return null;   // не https — хеширование недоступно
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + ':' + pass));
+  return Array.prototype.map.call(new Uint8Array(buf), function(b){ return b.toString(16).padStart(2, '0'); }).join('');
+}
+async function setPass(u, pass){
+  u.salt = randHex(8);
+  const h = await hashPass(pass, u.salt);
+  if(h){ u.ph = h; delete u.pass; } else { u.pass = pass; }
+}
+async function checkPass(u, pass){
+  if(u.ph) return (await hashPass(pass, u.salt)) === u.ph;
+  if(u.pass === pass){ await setPass(u, pass); return true; }   // старый аккаунт — заодно переводим пароль в хеш
+  return false;
+}
 
 let authMode = 'login';
 function setMode(m){
@@ -26,7 +96,7 @@ function setMode(m){
 }
 $('toSignup').onclick = function(){ setMode('reg'); };
 $('toSignin').onclick = function(){ setMode('login'); };
-$('toSignupM').onclick = function(e){ e.preventDefault(); setMode('reg'); };
+$('toSignupM').onclick = function(e){ e.preventDefault(); setMode('reg'); setTimeout(function(){ if(window.innerWidth > 700) $('aNameUp').focus(); }, 60); };
 $('toSigninM').onclick = function(e){ e.preventDefault(); setMode('login'); };
 
 function pwToggleInit(btnId, inputId){
@@ -59,7 +129,9 @@ function segSet(id, v){
 segInit('oSex'); segInit('oGoal'); segInit('rateMeal');
 
 let pending = null, diaryReady = false;
-$('authGo').onclick = function(){
+$('authGo').onclick = async function(){
+  const btn = this;
+  if(btn.disabled) return;
   const mail = $('aMail').value.trim().toLowerCase();
   const pass = $('aPass').value;
   const err = $('authErr');
@@ -69,9 +141,15 @@ $('authGo').onclick = function(){
   USERS = readUsers();
   const u = USERS[mail];
   if(!u){ err.textContent = 'Такого аккаунта нет. Нажми «Создать аккаунт».'; return; }
-  if(u.pass !== pass){ err.textContent = 'Неверный пароль.'; return; }
-  enter(mail);
-  toast('Успешный вход!');
+  busy(btn, true);
+  const ok = await checkPass(u, pass);
+  if(!ok){ busy(btn, false); err.textContent = 'Неверный пароль.'; return; }
+  writeUsers(USERS);
+  afterPaint(function(){
+    enter(mail, $('aRemember').checked);
+    busy(btn, false);
+    toast('Успешный вход!');
+  });
 };
 $('aPass').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGo').click(); });
 $('aMail').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGo').click(); });
@@ -95,23 +173,31 @@ $('aPassUp').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('a
 $('aMailUp').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGoUp').click(); });
 $('aNameUp').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('authGoUp').click(); });
 
-$('onbGo').onclick = function(){
-  const p = pending; if(!p) return;
-  USERS[p.mail] = {
-    name: p.name, pass: p.pass,
+$('onbGo').onclick = async function(){
+  const btn = this;
+  const p = pending; if(!p || btn.disabled) return;
+  busy(btn, true);
+  const acc = { name: p.name };
+  await setPass(acc, p.pass);
+  USERS[p.mail] = Object.assign(acc, {
     profile: {
       sex: segGet('oSex'), age: +$('oAge').value || 20, height: +$('oHeight').value || 175,
       weight: +$('oWeight').value || 75, act: $('oAct').value, goal: segGet('oGoal'),
       weights: [{ date: today(), kg: +$('oWeight').value || 75 }], cooked: []
     }
-  };
+  });
   writeUsers(USERS);
-  enter(p.mail);
-  toast('Успешная регистрация!');
+  afterPaint(function(){
+    enter(p.mail, $('aRememberUp').checked);
+    pending = null;
+    busy(btn, false);
+    toast('Успешная регистрация!');
+  });
 };
 
-function enter(key){
+function enter(key, remember){
   KEY = key; ME = USERS[key];
+  writeSession(key, remember !== false);
   if(!ME.profile.cooked) ME.profile.cooked = [];
   if(!ME.profile.weights) ME.profile.weights = [];
   const pr = ME.profile;
@@ -120,24 +206,24 @@ function enter(key){
   if(!pr.visits) pr.visits = [];
   if(!pr.daysBuilt) pr.daysBuilt = 0;
   if(pr.visits.indexOf(today()) < 0){ pr.visits.push(today()); save(); }
-  try { localStorage.setItem(LSS, key); } catch(e){}
   $('auth').style.display = 'none';
   $('app').style.display = '';
   const first = (ME.name || '?').trim().charAt(0).toUpperCase();
   $('ava').textContent = first; $('meName').textContent = ME.name; $('meMail').textContent = key;
   $('meNameM').textContent = ME.name;
-  if(!diaryReady){ diaryInit(); diaryReady = true; }
+  if(!diaryReady){ diaryInit(); Chat.init(); diaryReady = true; }
   dDate = today();
-  fillNorm(); renderAll(); go('norm');
+  fillNorm(); go('norm'); renderAll();
   achInit(); updateFab();
   $('qtToggle').checked = QuoteToasts.enabled();
   QuoteToasts.start();
   window.scrollTo(0, 0);
 }
 function leave(){
-  try { localStorage.removeItem(LSS); } catch(e){}
+  clearSession();
   KEY = null; ME = null;
   QuoteToasts.stop();
+  Chat.reset();
   closeProfile();
   $('app').style.display = 'none';
   $('auth').style.display = '';
@@ -173,9 +259,20 @@ $('tabbar').innerHTML = TABS.map(function(t){
   return '<button type="button" data-go="' + t.id + '">' + IC[t.id] + '<span>' + t.short + '</span></button>';
 }).join('');
 
+/* Ленивая отрисовка: при входе сразу рисуется только открытая вкладка,
+   остальные — когда браузер свободен (или в момент перехода на них). */
+const dirtyTab = {};
+function flushTab(id){
+  if(!dirtyTab[id] || !ME) return;
+  dirtyTab[id] = false;
+  if(id === 'recipes'){ renderRecipes(); if($('viewShakes').style.display !== 'none') renderShakes(); }
+  else if(id === 'gym') renderGym();
+  else if(id === 'diary') renderDiary();
+}
 function go(id){
   document.querySelectorAll('.tab').forEach(function(s){ s.classList.toggle('on', s.id === 'tab-' + id); });
   document.querySelectorAll('[data-go]').forEach(function(b){ b.classList.toggle('on', b.dataset.go === id); });
+  flushTab(id);
   if(id === 'diary') renderDiary();
   window.scrollTo(0, 0);
 }
@@ -426,8 +523,10 @@ function starsHtml(n){
 const KIND_ICON = {
   'без огня':'❄️', 'микроволновка':'📻', '1 сковорода':'🍳', 'духовка':'🔥', 'кастрюля':'🥘'
 };
+/* миниатюра 640px для карточек (полное фото — только в окне рецепта/упражнения) */
+function thumbSrc(src){ return src.replace(/(^|\/)static\/img\//, '$1static/img/t/'); }
 function foodThumb(r){
-  if(r.img) return '<img src="' + r.img + '" alt="' + esc(r.name) + '" loading="lazy" />';
+  if(r.img) return '<img src="' + thumbSrc(r.img) + '" alt="' + esc(r.name) + '" loading="lazy" decoding="async" width="640" height="478" />';
   return '<div class="rph-ph"><span>' + (KIND_ICON[r.kind] || '🍽️') + '</span></div>';
 }
 const HEART = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>';
@@ -808,7 +907,7 @@ function renderGym(){
   }
   $('gymGrid').innerHTML = list.map(function(e){
     return '<article class="ecard">' +
-      '<div class="ephoto"><img src="' + e.img + '" alt="' + esc(e.name) + '" loading="lazy" /><b>' + e.group + '</b>' +
+      '<div class="ephoto"><img src="' + thumbSrc(e.img) + '" alt="' + esc(e.name) + '" loading="lazy" decoding="async" width="640" height="478" /><b>' + e.group + '</b>' +
         '<div class="bmap">' + bodySvg(e.view, e.mMain, e.mAlso) + '</div>' +
         '<span class="mtag"><i class="dot"></i>' + esc(e.main) + '</span>' +
       '</div>' +
@@ -1108,15 +1207,32 @@ $('pdAchCats').addEventListener('click', function(e){
   achCat = b.dataset.cat; renderAch(achStats());
 });
 
+/* ================= мобильная клавиатура =================
+   Пока фокус в поле ввода (на телефоне) — нижнее меню и плавающие кнопки спрятаны. */
+(function(){
+  const typing = function(el){ return el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|range|file|date|color)$/.test(el.type))) || (el && el.isContentEditable); };
+  const touch = window.matchMedia('(hover:none)').matches;
+  if(!touch) return;
+  document.addEventListener('focusin', function(e){ if(typing(e.target)) document.body.classList.add('kb-open'); });
+  document.addEventListener('focusout', function(){ setTimeout(function(){ if(!typing(document.activeElement)) document.body.classList.remove('kb-open'); }, 80); });
+})();
+
 /* ================= init ================= */
-function renderAll(){ renderRecipes(); renderWeight(); renderGym(); renderHistory(); renderDiary(); }
+function renderAll(){
+  dirtyTab.recipes = dirtyTab.gym = dirtyTab.diary = true;
+  const cur = document.querySelector('.tab.on');
+  if(cur) flushTab(cur.id.replace('tab-', ''));
+  const idle = window.requestIdleCallback || function(f){ return setTimeout(f, 250); };
+  idle(function(){ ['diary', 'recipes', 'gym'].forEach(flushTab); renderWeight(); renderHistory(); }, { timeout:1500 });
+}
 $('wDate').value = today();
 $('rateDate').value = today();
 setMode('login');
 (function(){
-  let s = null;
-  try { s = localStorage.getItem(LSS); } catch(e){}
-  if(s && USERS[s]) enter(s);
+  // авто-вход: есть действующий токен — сразу в приложение, минуя экран входа
+  const v = validSession();
+  if(v) enter(v.k, v.remember);
+  else clearSession();
 })();
 
 /* ================= маскот-гантеля: медленно поворачивается к курсору ================= */

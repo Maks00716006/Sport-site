@@ -62,7 +62,7 @@ const QuoteToasts = (function(){
   function blocked(){
     return document.hidden ||
       !document.getElementById('app') || document.getElementById('app').style.display === 'none' ||
-      !!document.querySelector('.modal.on') ||
+      !!document.querySelector('.modal.on') || (typeof Chat !== 'undefined' && Chat.isOpen()) ||
       (document.getElementById('pdrawer') && document.getElementById('pdrawer').classList.contains('on')) ||
       (document.getElementById('toast') && document.getElementById('toast').classList.contains('on'));
   }
