@@ -455,6 +455,11 @@
         <section class="pd-sec">
           <h4>Активность и прогресс</h4>
           <div class="kpis pd-kpis" id="pdStats"></div>
+          <label class="pd-toggle">
+            <span><b>Мотивирующие цитаты</b><small>Иногда внизу экрана — от спортсменов, стримеров и артистов</small></span>
+            <input type="checkbox" id="qtToggle" checked />
+            <i class="sw" aria-hidden="true"></i>
+          </label>
         </section>
         <section class="pd-sec acc" data-acc="history">
           <button class="acc-h" type="button" aria-expanded="false">
@@ -733,12 +738,15 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="qt-root" id="qtRoot" aria-live="polite"></div>
 
 
 <script src="static/data.js"></script>
 <script src="static/achievements.js"></script>
 <script src="static/foods.js"></script>
 <script src="static/diary.js"></script>
+<script src="static/quotesData.js"></script>
+<script src="static/quotes.js"></script>
 <script src="static/path-fix.js"></script>
 <script src="static/app.js"></script>
 

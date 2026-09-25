@@ -130,11 +130,14 @@ function enter(key){
   dDate = today();
   fillNorm(); renderAll(); go('norm');
   achInit(); updateFab();
+  $('qtToggle').checked = QuoteToasts.enabled();
+  QuoteToasts.start();
   window.scrollTo(0, 0);
 }
 function leave(){
   try { localStorage.removeItem(LSS); } catch(e){}
   KEY = null; ME = null;
+  QuoteToasts.stop();
   closeProfile();
   $('app').style.display = 'none';
   $('auth').style.display = '';
@@ -991,6 +994,7 @@ function closeProfile(){
   $('pfab').focus({ preventScroll: true });
 }
 $('pfab').onclick = openProfile;
+$('qtToggle').addEventListener('change', function(){ QuoteToasts.setEnabled(this.checked); toast(this.checked ? 'Цитаты включены' : 'Цитаты выключены'); });
 
 /* сворачиваемые разделы профиля */
 const accOpen = { cooked:true, fav:true };
