@@ -1,5 +1,8 @@
-/* ================= ИИ-МЕНТОР (чат на Claude) =================
+/* ================= ИИ-МЕНТОР =================
    Режимы подключения:
+     • puter  — ПО УМОЛЧАНИЮ. Бесплатно для владельца сайта, без ключей и без сервера (Puter.js,
+       модель «user-pays»): посетитель один раз входит в бесплатный аккаунт Puter, а если когда-нибудь
+       исчерпает бесплатный лимит Puter — платит сам, со своего аккаунта. Владелец не платит никогда.
      • server — через свой защищённый роут /api/chat (worker/index.js): ключ на сервере, промпт на сервере.
        Адрес берётся из static/config.js (chatEndpoint) или /api/chat, если сайт открыт с Cloudflare.
      • key    — для личного использования: свой ключ Anthropic, хранится только в этом браузере,
@@ -27,7 +30,10 @@ const Chat = (function(){
   function cfg(){
     let c = {};
     try { c = JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch(e){}
-    return { mode:c.mode || 'server', endpoint:c.endpoint || '', apiKey:c.apiKey || '', model:c.model || '' };
+    const def = (window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatProvider) || 'puter';
+    let mode = c.mode || def;
+    if(mode === 'server' && !c.endpoint && !(window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatEndpoint) && /github\.io$/.test(location.hostname)) mode = 'puter';
+    return { mode:mode, endpoint:c.endpoint || '', apiKey:c.apiKey || '', model:c.model || '' };
   }
   function saveCfg(c){ try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch(e){} }
   function endpoint(){
@@ -38,7 +44,44 @@ const Chat = (function(){
     // на GitHub Pages сервера нет — нужен адрес воркера в config.js
     return /github\.io$/.test(location.hostname) || location.protocol === 'file:' ? '' : '/api/chat';
   }
-  function ready(){ const c = cfg(); return c.mode === 'key' ? !!c.apiKey : !!endpoint(); }
+  function ready(){ const c = cfg(); return c.mode === 'puter' ? true : c.mode === 'key' ? !!c.apiKey : !!endpoint(); }
+
+  /* ---------- Puter.js (бесплатный режим) ---------- */
+  let puterP = null, pendingText = '';
+  function loadPuter(){
+    if(window.puter && window.puter.ai) return Promise.resolve(window.puter);
+    if(puterP) return puterP;
+    puterP = new Promise(function(ok, bad){
+      const s = document.createElement('script'); s.src = 'https://js.puter.com/v2/'; s.async = true;
+      s.onload = function(){ window.puter ? ok(window.puter) : bad(new Error('puter')); };
+      s.onerror = function(){ puterP = null; s.remove(); bad(new Error('puter-load')); };
+      document.head.appendChild(s);
+    });
+    return puterP;
+  }
+  function puterSigned(){ try { return !!(window.puter && puter.auth && puter.auth.isSignedIn()); } catch(e){ return false; } }
+  function showSignIn(){
+    const old = log().querySelector('.chat-signin'); if(old) old.remove();
+    const el = note('<b>Бесплатный ИИ-ментор</b><span>Чтобы начать, один раз войди в бесплатный аккаунт Puter — это сервис, через который работает ИИ. Платить ничего не нужно.</span>' +
+      '<button type="button" class="btn sm wide chat-signin-btn">Войти и начать</button>', 'signin');
+    el.classList.add('chat-signin');
+    el.querySelector('.chat-signin-btn').onclick = doSignIn;
+  }
+  async function doSignIn(){
+    const btn = log().querySelector('.chat-signin-btn');
+    try {
+      if(btn) busy(btn, true);
+      const p = window.puter && window.puter.auth ? window.puter : await loadPuter();
+      await p.auth.signIn();                     // всплывающее окно Puter (вызывается прямо из нажатия)
+      const card = log().querySelector('.chat-signin'); if(card) card.remove();
+      setSendState(false);
+      if(pendingText){ const t = pendingText; pendingText = ''; send(t); }
+      else $('chatQ').focus();
+    } catch(e){
+      if(btn) busy(btn, false);
+      note('Не получилось войти. Если окно входа не открылось — разреши всплывающие окна для сайта и нажми ещё раз.', 'err');
+    }
+  }
 
   /* ---------- история ---------- */
   function histKey(){ return 'wsport-chat-' + (typeof KEY !== 'undefined' && KEY ? KEY : 'guest'); }
@@ -94,6 +137,10 @@ const Chat = (function(){
     history.forEach(function(m){ bubble(m.role, m.content); });
     $('chatSugg').style.display = history.length ? 'none' : '';
     if(!ready()) showSetup();
+    else if(cfg().mode === 'puter'){
+      loadPuter().then(function(){ if(open && !puterSigned() && !log().querySelector('.chat-signin')) showSignIn(); setSendState(!!streaming); })
+        .catch(function(){ note('Не удалось загрузить бесплатный ИИ (js.puter.com). Проверь интернет или VPN и открой чат ещё раз.', 'err'); });
+    }
     toBottom(true);
   }
   function note(html, kind){
@@ -104,13 +151,70 @@ const Chat = (function(){
     return el;
   }
   function showSetup(){
-    note('Чат ещё не подключён к ИИ. Владельцу сайта: задеплой сервер <code>worker/index.js</code> на Cloudflare и впиши его адрес в <code>static/config.js</code> — или открой ⚙︎ и подключи свой ключ Anthropic для личного пользования.', 'warn');
+    note('Этот режим ещё не настроен. Открой ⚙︎ и выбери «Бесплатно» — это работает сразу, без ключей.', 'warn');
   }
 
   /* ---------- отправка и стриминг ---------- */
   async function getPrompt(){
     if(!promptMod) promptMod = await import(new URL('static/chatPrompt.mjs', document.baseURI).href);
     return promptMod;
+  }
+  /* единый поток текста для всех провайдеров */
+  async function* streamText(messages, signal){
+    const c = cfg();
+    if(c.mode === 'puter'){
+      const p = await loadPuter();
+      const pr = await getPrompt();
+      const opts = { stream:true }; if(c.model) opts.model = c.model;
+      let resp;
+      try { resp = await p.ai.chat([{ role:'system', content:pr.SYSTEM_PROMPT }].concat(messages), opts); }
+      catch(e){
+        if(puterErr(e).auth) throw e;
+        // запасной формат: весь диалог одной строкой
+        const flat = pr.SYSTEM_PROMPT + '\n\n' + messages.map(function(m){ return (m.role === 'user' ? 'Пользователь: ' : 'Ментор: ') + m.content; }).join('\n\n') + '\n\nМентор:';
+        resp = await p.ai.chat(flat, opts);
+      }
+      if(resp && typeof resp[Symbol.asyncIterator] === 'function'){
+        for await (const part of resp){
+          if(signal.aborted) throw { name:'AbortError' };
+          const t = part && (part.text || (part.message && part.message.content) || '');
+          if(t) yield t;
+        }
+      } else {
+        const t = resp && (resp.message ? (typeof resp.message.content === 'string' ? resp.message.content : (resp.message.content || []).map(function(x){ return x.text || ''; }).join('')) : (resp.text || String(resp)));
+        if(t) yield t;
+      }
+      return;
+    }
+    const res = await request(messages, signal);
+    if(!res.ok || !res.body){
+      let b = null; try { b = await res.json(); } catch(e){}
+      throw { ui:errText(res.status, b) };
+    }
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for(;;){
+      const r = await reader.read();
+      if(r.done) break;
+      buf += dec.decode(r.value, { stream:true });
+      let i;
+      while((i = buf.indexOf('\n\n')) >= 0){
+        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+        const dataLine = chunk.split('\n').filter(function(l){ return l.indexOf('data:') === 0; }).map(function(l){ return l.slice(5).trim(); }).join('');
+        if(!dataLine) continue;
+        let ev; try { ev = JSON.parse(dataLine); } catch(e){ continue; }
+        if(ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') yield ev.delta.text;
+        else if(ev.type === 'error') throw { ui:(ev.error && ev.error.type === 'overloaded_error') ? 'ИИ сейчас перегружен — попробуй через минуту.' : ((ev.error && ev.error.message) || 'Ошибка во время ответа.') };
+      }
+    }
+  }
+  function puterErr(e){
+    const m = String((e && (e.message || (e.error && e.error.message) || e.error || e.code)) || e || '');
+    return {
+      auth: /auth|sign.?in|log.?in|unauthori|token/i.test(m),
+      funds: /insufficient|funds|credit|balance|quota|limit|payment/i.test(m),
+      text: m
+    };
   }
   async function request(messages, signal){
     const c = cfg();
@@ -137,6 +241,12 @@ const Chat = (function(){
     text = String(text || '').trim();
     if(!text || streaming) return;
     if(!ready()){ showSetup(); openCfg(true); return; }
+    if(cfg().mode === 'puter' && !puterSigned()){
+      // вход нужен один раз; сообщение отправится сразу после входа
+      pendingText = text;
+      if(window.puter && window.puter.auth){ doSignIn(); } else { showSignIn(); }
+      return;
+    }
     $('chatSugg').style.display = 'none';
     const hello = log().querySelector('.chat-hello'); if(hello) hello.remove();
     history.push({ role:'user', content:text }); saveHist();
@@ -150,30 +260,9 @@ const Chat = (function(){
     const paint = function(){ raf = 0; const stick = nearBottom(); bub.innerHTML = md(acc) + '<span class="caret"></span>'; if(stick) toBottom(true); };
     try {
       const msgs = history.slice(-SEND_MAX).map(function(m){ return { role:m.role, content:m.content }; });
-      const res = await request(msgs, ctrl.signal);
-      if(!res.ok || !res.body){
-        let b = null; try { b = await res.json(); } catch(e){}
-        throw { ui:errText(res.status, b) };
-      }
-      const reader = res.body.getReader(), dec = new TextDecoder();
-      let buf = '';
-      for(;;){
-        const r = await reader.read();
-        if(r.done) break;
-        buf += dec.decode(r.value, { stream:true });
-        let i;
-        while((i = buf.indexOf('\n\n')) >= 0){
-          const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
-          const dataLine = chunk.split('\n').filter(function(l){ return l.indexOf('data:') === 0; }).map(function(l){ return l.slice(5).trim(); }).join('');
-          if(!dataLine) continue;
-          let ev; try { ev = JSON.parse(dataLine); } catch(e){ continue; }
-          if(ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta'){
-            acc += ev.delta.text;
-            if(!raf) raf = requestAnimationFrame(paint);
-          } else if(ev.type === 'error'){
-            throw { ui:(ev.error && ev.error.type === 'overloaded_error') ? 'ИИ сейчас перегружен — попробуй через минуту.' : ((ev.error && ev.error.message) || 'Ошибка во время ответа.') };
-          }
-        }
+      for await (const t of streamText(msgs, ctrl.signal)){
+        acc += t;
+        if(!raf) raf = requestAnimationFrame(paint);
       }
       if(raf) cancelAnimationFrame(raf);
       if(!acc.trim()) throw { ui:'Пустой ответ — попробуй ещё раз.' };
@@ -187,7 +276,14 @@ const Chat = (function(){
       } else {
         if(acc.trim()){ bub.innerHTML = md(acc); history.push({ role:'assistant', content:acc }); saveHist(); }
         else { el.remove(); }
-        note((e && e.ui) ? esc(e.ui) : 'Нет связи с сервером чата. Проверь интернет и попробуй ещё раз.', 'err');
+        let msg = (e && e.ui) ? e.ui : 'Нет связи с ИИ. Проверь интернет и попробуй ещё раз.';
+        if(cfg().mode === 'puter' && !(e && e.ui)){
+          const pe = puterErr(e);
+          if(pe.funds) msg = 'Бесплатный лимит твоего аккаунта Puter закончился. Его можно пополнить на puter.com — или подожди, пока лимит обновится.';
+          else if(pe.auth){ msg = 'Нужно войти в Puter ещё раз.'; showSignIn(); }
+          else if(/load/.test(pe.text)) msg = 'Бесплатный ИИ не загрузился. Проверь интернет или VPN.';
+        }
+        note(esc(msg), 'err');
       }
     } finally {
       streaming = null; setSendState(false); toBottom();
@@ -235,8 +331,16 @@ const Chat = (function(){
     segSet('chatMode', c.mode);
     $('chatEp').value = c.endpoint || ''; $('chatEp').placeholder = endpoint() || 'https://…workers.dev/api/chat';
     $('chatKey').value = c.apiKey || ''; $('chatModel').value = c.model || '';
-    $('chatEpRow').style.display = c.mode === 'key' ? 'none' : '';
-    $('chatKeyRow').style.display = c.mode === 'key' ? '' : 'none';
+    cfgRows(c.mode);
+  }
+  function cfgRows(v){
+    $('chatPuterRow').style.display = v === 'puter' ? '' : 'none';
+    $('chatEpRow').style.display = v === 'server' ? '' : 'none';
+    $('chatKeyRow').style.display = v === 'key' ? '' : 'none';
+    $('chatModelRow').style.display = v === 'server' ? 'none' : '';
+    $('chatModel').placeholder = v === 'key' ? 'claude-sonnet-5' : 'по умолчанию';
+    $('chatPuterState').textContent = puterSigned() ? 'Ты вошёл в Puter — ИИ работает бесплатно.' : 'Вход в Puter понадобится при первом сообщении.';
+    $('chatPuterOut').style.display = puterSigned() ? '' : 'none';
   }
 
   function init(){
@@ -256,7 +360,8 @@ const Chat = (function(){
     });
     $('chatSugg').innerHTML = SUGGEST.map(function(s){ return '<button type="button" class="chip">' + s + '</button>'; }).join('');
     $('chatSugg').addEventListener('click', function(e){ const b = e.target.closest('.chip'); if(b) send(b.textContent); });
-    segInit('chatMode', function(v){ $('chatEpRow').style.display = v === 'key' ? 'none' : ''; $('chatKeyRow').style.display = v === 'key' ? '' : 'none'; });
+    segInit('chatMode', cfgRows);
+    $('chatPuterOut').onclick = function(){ try { puter.auth.signOut(); } catch(e){} cfgRows('puter'); toast('Вышел из Puter'); };
     $('chatCfgSave').onclick = function(){
       saveCfg({ mode:segGet('chatMode'), endpoint:$('chatEp').value.trim(), apiKey:$('chatKey').value.trim(), model:$('chatModel').value.trim() });
       $('chatCfg').hidden = true; renderAll(); setSendState(false);

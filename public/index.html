@@ -449,13 +449,17 @@
       <button type="button" class="chat-ib" id="chatClose" aria-label="Закрыть чат"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
     <div class="chat-cfg" id="chatCfg" hidden>
-      <div class="seg" id="chatMode"><button type="button" data-v="server" class="on">Сервер сайта</button><button type="button" data-v="key">Свой ключ</button></div>
-      <div id="chatEpRow"><div class="field"><label for="chatEp">Адрес /api/chat</label><input id="chatEp" type="url" autocomplete="off" /></div>
-        <p class="foot">Обычно пусто: адрес берётся из static/config.js. Ключ Anthropic хранится на сервере.</p></div>
+      <div class="seg" id="chatMode"><button type="button" data-v="puter" class="on">Бесплатно</button><button type="button" data-v="server">Свой сервер</button><button type="button" data-v="key">Свой ключ</button></div>
+      <div id="chatPuterRow">
+        <p class="foot"><span id="chatPuterState"></span> Работает через Puter: без ключей и без оплаты со стороны сайта. Если у кого-то закончится бесплатный лимит Puter — это его аккаунт, не твой.</p>
+        <button class="btn sm ghost" type="button" id="chatPuterOut" style="display:none">Выйти из Puter</button>
+      </div>
+      <div id="chatEpRow" style="display:none"><div class="field"><label for="chatEp">Адрес /api/chat</label><input id="chatEp" type="url" autocomplete="off" /></div>
+        <p class="foot">Свой сервер (worker/index.js на Cloudflare) с ключом Anthropic. Обычно адрес берётся из static/config.js.</p></div>
       <div id="chatKeyRow" style="display:none">
         <div class="field"><label for="chatKey">Ключ Anthropic API</label><input id="chatKey" type="password" autocomplete="off" placeholder="sk-ant-…" /></div>
-        <div class="field"><label for="chatModel">Модель (необязательно)</label><input id="chatModel" type="text" autocomplete="off" placeholder="claude-sonnet-5" /></div>
-        <p class="foot">Только для личного использования: ключ хранится в этом браузере и отправляется напрямую в Anthropic.</p></div>
+        <p class="foot">Только для личного использования: ключ хранится в этом браузере.</p></div>
+      <div id="chatModelRow"><div class="field"><label for="chatModel">Модель (необязательно)</label><input id="chatModel" type="text" autocomplete="off" placeholder="по умолчанию" /></div></div>
       <button class="btn sm" type="button" id="chatCfgSave">Сохранить</button>
     </div>
     <div class="chat-log" id="chatLog" aria-live="polite"></div>
