@@ -7,8 +7,8 @@
    • Цитата не показывается поверх открытых окон, профиля, другого тоста и в фоновой вкладке. */
 const QuoteToasts = (function(){
   const config = {
-    firstDelay: [12000, 20000],   // первая цитата после входа
-    interval:   [40000, 90000],   // пауза между цитатами (случайная)
+    firstDelay: [12000, 20000],   // самая первая цитата (один раз, при первом входе)
+    interval:   [15 * 60000, 25 * 60000],   // пауза между цитатами: случайно 15–25 минут
     showMs:     5500,             // сколько цитата висит на экране
     retryMs:    8000              // повторная попытка, если сейчас мешает окно/тост
   };
@@ -56,7 +56,7 @@ const QuoteToasts = (function(){
   function enabled(){ return load().off !== true; }
   function setEnabled(on){
     const s = load(); s.off = !on; store(s);
-    if(on){ schedule(rnd([4000, 7000])); } else { stop(); hide(true); }
+    if(on){ planNext(rnd([4000, 7000])); } else { stop(); hide(true); }
   }
 
   function blocked(){
@@ -72,11 +72,14 @@ const QuoteToasts = (function(){
     if(!enabled()) return;
     timer = setTimeout(tick, ms);
   }
+  /* время следующей цитаты хранится в браузере — перезагрузка страницы
+     не сбрасывает паузу и не вызывает внеочередную цитату */
+  function planNext(ms){ const s = load(); s.nextAt = Date.now() + ms; store(s); schedule(ms); }
   function tick(){
     if(!enabled()) return;
     if(blocked()){ schedule(config.retryMs); return; }
     show(next());
-    schedule(config.showMs + rnd(config.interval));
+    planNext(config.showMs + rnd(config.interval));
   }
 
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
@@ -136,7 +139,12 @@ const QuoteToasts = (function(){
     next: next, shuffle: shuffle,
     enabled: enabled, setEnabled: setEnabled,
     // вызывается при входе в аккаунт
-    start: function(){ if(started) return; started = true; schedule(rnd(config.firstDelay)); },
+    start: function(){
+      if(started) return; started = true;
+      const at = load().nextAt;
+      if(at) schedule(Math.max(3000, at - Date.now()));   // продолжаем паузу с того места, где она была
+      else planNext(rnd(config.firstDelay));
+    },
     // вызывается при выходе
     stop: function(){ started = false; stop(); hide(true); },
     showNow: function(){ show(next()); }
