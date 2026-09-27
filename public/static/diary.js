@@ -792,7 +792,7 @@ const VisionAI = {
       const r = await window.siteAI.fetch({ temperature:0.2,
         messages:[ { role:'system', content:VisionAI.prompt },
                    { role:'user', content:[ { type:'text', text:'Что на тарелке и сколько в этом КБЖУ и сахара? Ответь только JSON.' }, { type:'image_url', image_url:{ url:dataUrl } } ] } ] },
-        { models:(window.WSPORT_CONFIG && window.WSPORT_CONFIG.aiVisionModels) || undefined });
+        { vision:true });
       if(r.status === 402 || r.status === 429) throw new Error('ИИ сейчас занят или дневной лимит закончился — попробуй чуть позже.');
       if(!r.ok) throw new Error('Сервис распознавания ответил ошибкой ' + r.status + '.');
       const j = await r.json();

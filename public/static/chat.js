@@ -283,7 +283,7 @@ const Chat = (function(){
     const c = cfg();
     if(c.mode === 'open'){
       const p = await getPrompt();
-      return window.siteAI.fetch({ messages:[{ role:'system', content:p.SYSTEM_PROMPT }].concat(messages), stream:true, max_tokens:1500 }, { signal:signal });
+      return window.siteAI.fetch({ messages:[{ role:'system', content:p.SYSTEM_PROMPT }].concat(messages), stream:true }, { signal:signal });
     }
     if(c.mode === 'key'){
       const p = await getPrompt();
