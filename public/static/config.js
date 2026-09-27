@@ -12,7 +12,7 @@
 window.WSPORT_CONFIG = {
   chatProvider: 'auto',
   aiBase: 'https://gen.pollinations.ai/v1',
-  aiKey: '',
+  aiKey: 'pk_4TMmxy012wAHKMqo',
   aiModels: ['openai', 'openai-fast'],
   aiVisionModels: ['openai', 'openai-fast'],
   chatEndpoint: ''
