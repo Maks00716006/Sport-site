@@ -763,18 +763,19 @@ const VisionAI = {
   },
   saveCfg: function(c){ try { localStorage.setItem(this.key, JSON.stringify(c)); } catch(e){} },
   ready: function(){ const c = this.cfg(); return c.provider === 'site' ? true : c.provider === 'proxy' ? !!c.endpoint : !!c.apiKey; },
-  prompt: 'Ты опытный нутрициолог. На фото — еда (скорее всего домашняя, русская/европейская кухня). ' +
-    'Определи КАЖДЫЙ отдельный продукт или блюдо (гарнир, мясо, соус, хлеб, напиток — отдельными пунктами). ' +
-    'ПЕРЕСЧИТАЙ штучные продукты (котлеты, яйца, сырники, куски хлеба): если их несколько — один пункт с общим весом, а в названии укажи количество, например «котлеты ×2». ' +
-    'Считай только еду на тарелке/в руках, а не то, что стоит на фоне. ' +
-    'Домашние порции обычно больше, чем кажется на фото: оценивай вес по объёму горки (высоте и площади), не занижай. ' +
-    'Тёртые салаты и овощи часто с майонезом или маслом — если видна заправка (белые вкрапления, блеск), учитывай её. ' +
-    'Оцени вес каждого в граммах по размеру посуды и приборов: обычная тарелка 24–26 см, ложка ~15 см, стакан 250 мл. ' +
-    'Учитывай способ приготовления (жареное — с маслом, салат — с заправкой, если она видна). ' +
-    'Посчитай для ЭТОГО веса (не на 100 г): калории kcal, белки p, жиры f, углеводы c и сахар s (всего сахара, включая натуральный) — по стандартным таблицам. ' +
-    'Проверь себя: kcal ≈ 4·p + 9·f + 4·c, сахар не больше углеводов. Названия — по-русски, коротко. Все числа — просто числа, без единиц. ' +
-    'Ответь ТОЛЬКО JSON без пояснений и без markdown: {"dish":"общее название","items":[{"name":"...","grams":150,"kcal":0,"p":0,"f":0,"c":0,"s":0}],"confidence":0.0-1.0,"note":"короткое замечание, если что-то плохо видно"}. ' +
-    'Если на фото нет еды — {"dish":"","items":[],"confidence":0,"note":"На фото не видно еды"}.',
+  /* Как ИИ считает: сначала описывает, что видит (штуки, размер горок), потом вес и КБЖУ НА 100 Г по таблице,
+     а итог на порцию считает уже сайт (ИИ часто ошибается в умножении, а в табличных значениях — редко). */
+  prompt: [
+    'Ты опытный нутрициолог. На фото — еда, чаще всего домашняя русская кухня. Задача — как можно точнее оценить, сколько человек съест.',
+    'ШАГ 1. Внимательно осмотри тарелку и опиши в поле "seen": какие продукты, СКОЛЬКО ШТУК каждого штучного (котлеты, яйца, сырники, сосиски, куски хлеба, пельмени — пересчитай дважды), какую часть тарелки занимает каждый и насколько высокая горка.',
+    'Считай только еду на тарелке/в руках. Напитки и продукты на фоне не считай, если их явно не едят сейчас.',
+    'ШАГ 2. Оцени вес каждого продукта в граммах. Ориентиры: обычная тарелка 24–26 см, вилка ~19 см, ложка ~15 см. Полная тарелка гарнира — 250–350 г, половина тарелки горкой — 180–250 г, четверть — 80–130 г. Котлета домашняя 80–100 г, куриная грудка 150–200 г, яйцо 55 г, сырник 50 г, сосиска 50 г, кусок хлеба 25–30 г, столовая ложка соуса 15–20 г. Домашние порции обычно больше, чем кажется на фото, — не занижай.',
+    'Штучные одинаковые продукты — ОДИН пункт с общим весом, в названии количество: «котлеты ×2».',
+    'ШАГ 3. Для каждого продукта дай КБЖУ и сахар НА 100 Г готового блюда с учётом способа приготовления (жарка — с маслом; тёртые салаты с белыми вкраплениями — с майонезом). Опорные значения на 100 г (ккал/Б/Ж/У): макароны отварные 145/5/1/29; гречка отварная 110/4/1/21; рис отварной 130/2.5/0.3/28; пюре с маслом и молоком 105/2/4/15; картофель жареный 190/3/10/22; картофель отварной 85/2/0.4/17; котлета жареная свино-говяжья 250/15/18/8; котлета куриная 190/17/10/8; куриная грудка 150/30/3/0; курица с кожей запечённая 220/24/14/0; тушёное мясо, гуляш 180/16/12/3; рыба жареная 180/18/10/5; пельмени 250/11/12/25; плов 190/7/8/22; капуста тушёная 75/2/4/8; морковь тёртая с майонезом 170/1/15/7, без заправки 35/1/0/7; салат из овощей с маслом 90/1/7/5; оливье 190/5/15/8; яйцо варёное 155/13/11/1; яичница 190/13/15/1; сырники 220/15/10/18; омлет 180/10/14/2; хлеб белый 260/8/3/50; хлеб чёрный 200/6/1.5/40; сосиски 260/11/24/2; борщ 50/2/2.5/5; овсянка на молоке 110/4/3.5/16; сметана 15% 160/3/15/3; майонез 620/1/67/3; кетчуп 100/2/0/22.',
+    'Проверь: ккал ≈ 4·Б + 9·Ж + 4·У, сахар не больше углеводов.',
+    'Ответь ТОЛЬКО JSON без markdown и пояснений, числа — без единиц: {"seen":"что вижу, штуки, размеры","dish":"общее название","items":[{"name":"котлеты ×2","count":2,"grams":180,"per100":{"kcal":250,"p":15,"f":18,"c":8,"s":1}}],"confidence":0.0-1.0,"note":"коротко, что могло сбить оценку"}.',
+    'Если на фото нет еды — {"seen":"","dish":"","items":[],"confidence":0,"note":"На фото не видно еды"}.'
+  ].join(' '),
   downscale: function(file, max){
     return new Promise(function(ok, bad){
       const img = new Image(), url = URL.createObjectURL(file);
@@ -848,22 +849,33 @@ const VisionAI = {
     const n = VisionAI.num;
     return (Array.isArray(items) ? items : []).slice(0, 12).map(function(x){
       x = x || {};
+      // новый формат: КБЖУ на 100 г + вес → итог на порцию считаем сами (точнее, чем умножение у ИИ)
+      const h = x.per100 || x.per_100g || x.per100g;
+      if(h && typeof h === 'object'){
+        const g = n(x.grams != null ? x.grams : x.weight) || 0, k = g / 100;
+        const hv = function(a, b){ const v = n(h[a] != null ? h[a] : h[b]); return v == null ? null : Math.max(0, v); };
+        const kc = hv('kcal', 'calories'), hp = hv('p', 'protein') || 0, hf = hv('f', 'fat') || 0, hc = hv('c', 'carbs') || 0, hs = hv('s', 'sugar');
+        x = { name:x.name, count:x.count, grams:g, kcal:kc == null ? null : kc * k, p:hp * k, f:hf * k, c:hc * k, s:hs == null ? null : hs * k };
+      }
       const it = { name:String(x.name || x.title || 'Блюдо').trim().slice(0, 60) || 'Блюдо',
         grams:Math.max(0, Math.min(3000, n(x.grams != null ? x.grams : x.weight) || 0)),
-        kcal:Math.max(0, n(x.kcal != null ? x.kcal : x.calories) || 0),
+        kcal:Math.round(Math.max(0, n(x.kcal != null ? x.kcal : x.calories) || 0)),
         p:Math.max(0, n(x.p != null ? x.p : x.protein) || 0), f:Math.max(0, n(x.f != null ? x.f : x.fat) || 0), c:Math.max(0, n(x.c != null ? x.c : x.carbs) || 0) };
       const s = n(x.s != null ? x.s : x.sugar);
       it.s = s == null ? null : Math.max(0, s);
       const byMacro = 4 * it.p + 9 * it.f + 4 * it.c;
       if(!it.kcal && byMacro) it.kcal = Math.round(byMacro);                 // калорий нет — считаем из БЖУ
       if(it.s != null && it.s > it.c) it.s = it.c;                           // сахара не бывает больше углеводов
-      // больше 9 ккал на грамм не бывает (даже у масла) — значит ИИ перепутал вес или посчитал на 100 г
       // больше 9 ккал на грамм не бывает (даже у масла) — значит ИИ посчитал КБЖУ на 100 г, а не на порцию: пересчитываем
       if(it.grams && it.kcal / it.grams > 9.2){
         const k = it.grams / 100;
         it.kcal = Math.round(it.kcal * k); it.p *= k; it.f *= k; it.c *= k; if(it.s != null) it.s *= k;
         it.warn = true;
       }
+      // штучные продукты: сколько штук и вес одной — чтобы можно было поправить «1 → 2 котлеты» одной кнопкой
+      let cnt = n(x.count);
+      if(cnt == null){ const m = /[×x*]\s*(\d{1,2})\s*$/i.exec(it.name); if(m) cnt = +m[1]; }
+      if(cnt != null && cnt >= 1 && cnt <= 30 && Math.round(cnt) === cnt && it.grams){ it.count = cnt; it.unit = it.grams / cnt; }
       return it;
     }).filter(function(it){ return it.kcal > 0 || it.grams > 0; });
   },
@@ -936,7 +948,10 @@ function renderAiItems(out){
     (out && out.dish ? '<div class="ai-dish"><b>' + esc(out.dish) + '</b>' + (out.confidence != null ? '<span>уверенность ' + Math.round(out.confidence * 100) + '%</span>' : '') + '</div>' : '') +
     aiItems.map(function(x, i){
       return '<div class="ai-row"><input class="ai-n" data-i="' + i + '" value="' + esc(x.name) + '" aria-label="Название" />' +
-        '<label class="ai-g"><input type="number" min="0" step="5" data-i="' + i + '" value="' + Math.round(x.grams) + '" aria-label="Вес, г" /> г</label>' +
+        '<span class="ai-gw"><button type="button" class="ai-gs" data-i="' + i + '" data-d="-1" aria-label="Меньше">−</button>' +
+        '<label class="ai-g"><input type="number" min="0" step="5" inputmode="numeric" data-i="' + i + '" value="' + Math.round(x.grams) + '" aria-label="Вес, г" /> г</label>' +
+        '<button type="button" class="ai-gs" data-i="' + i + '" data-d="1" aria-label="Больше">+</button></span>' +
+        (x.count ? '<span class="ai-cnt"><button type="button" data-i="' + i + '" data-d="-1" aria-label="На одну штуку меньше">−</button><b>' + x.count + ' шт</b><button type="button" data-i="' + i + '" data-d="1" aria-label="На одну штуку больше">+</button></span>' : '') +
         '<span class="ai-k">' + Math.round(x.kcal) + ' ккал<br><small>Б ' + r1(x.p) + ' Ж ' + r1(x.f) + ' У ' + r1(x.c) + ' Сахар ' + sv(x.s) + '</small></span></div>';
     }).join('') +
     '<div class="ai-tot">Итого: <b>' + Math.round(tot.kcal) + ' ккал</b> · Б ' + r1(tot.p) + ' · Ж ' + r1(tot.f) + ' · У ' + r1(tot.c) + ' · Сахар ' + r1(tot.s) + '</div>' +
@@ -1132,6 +1147,26 @@ function diaryInit(){
     const r = e.target.closest('.fres');
     if(r){ const k = r.dataset.key; showPortion(k[0] === 'l' ? fLocalList[+k.slice(1)] : fOffList[+k.slice(1)]); return; }
     const c = e.target.closest('#fpChips .chip'); if(c){ $('fpAmount').value = c.dataset.v; updatePortion(); return; }
+    const gs = e.target.closest('.ai-gs');
+    if(gs){
+      // «на глаз больше/меньше»: шаг 10 г для маленьких порций, 25 г для больших
+      const gi = gs.parentNode.querySelector('.ai-g input'), g = +gi.value || 0, st = g < 100 ? 10 : 25;
+      gi.value = Math.max(0, Math.round((g + st * (+gs.dataset.d)) / 5) * 5);
+      gi.dispatchEvent(new Event('input', { bubbles:true }));
+      return;
+    }
+    const cb = e.target.closest('.ai-cnt button');
+    if(cb){
+      const x = aiItems[+cb.dataset.i]; if(!x || !x.unit) return;
+      x.count = Math.max(1, Math.min(30, x.count + (+cb.dataset.d)));
+      x.name = String(x.name).replace(/\s*[×x*]\s*\d{1,2}\s*$/i, '') + (x.count > 1 ? ' ×' + x.count : '');
+      const row = cb.closest('.ai-row');
+      row.querySelector('.ai-n').value = x.name;
+      row.querySelector('.ai-cnt b').textContent = x.count + ' шт';
+      const gi = row.querySelector('.ai-g input'); gi.value = Math.round(x.unit * x.count);
+      gi.dispatchEvent(new Event('input', { bubbles:true }));        // пересчёт калорий и итога
+      return;
+    }
     if(e.target.closest('#aiAdd')){
       const add = aiItems.filter(function(x){ return x.kcal > 0 || x.grams > 0; });
       if(!add.length){ toast('Нечего добавлять — укажи вес'); return; }
@@ -1177,6 +1212,7 @@ function diaryInit(){
     if(!x.k && x.grams === 0 && g > 0 && x.kcal > 0){ x.grams = g; x.k = { kcal:x.kcal / g, p:x.p / g, f:x.f / g, c:x.c / g, s:x.s == null ? null : x.s / g }; }
     if(x.k){ x.kcal = x.k.kcal * g; x.p = x.k.p * g; x.f = x.k.f * g; x.c = x.k.c * g; if(x.k.s != null) x.s = x.k.s * g; }
     x.grams = g;
+    if(x.count && g) x.unit = g / x.count;                           // поправил вес вручную — вес одной штуки тоже меняется
     const k = e.target.closest('.ai-row').querySelector('.ai-k');
     k.innerHTML = Math.round(x.kcal) + ' ккал<br><small>Б ' + r1(x.p) + ' Ж ' + r1(x.f) + ' У ' + r1(x.c) + ' Сахар ' + sv(x.s) + '</small>';
     const tot = aiItems.reduce(function(t, y){ return { kcal:t.kcal + y.kcal, p:t.p + y.p, f:t.f + y.f, c:t.c + y.c, s:t.s + (y.s || 0) }; }, { kcal:0, p:0, f:0, c:0, s:0 });

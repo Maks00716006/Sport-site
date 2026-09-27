@@ -1371,3 +1371,12 @@
     .macro b{font-size:20px;}
     .macro span{font-size:12px;}
   }
+  .ai-cnt{display:inline-flex;align-items:center;gap:2px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:2px;flex:none;}
+  .ai-cnt button{width:36px;height:36px;border-radius:8px;font-size:18px;font-weight:700;color:var(--lime);display:grid;place-items:center;}
+  .ai-cnt button:active{background:var(--limesoft);}
+  .ai-cnt b{font-size:12.5px;min-width:34px;text-align:center;font-weight:700;}
+  @media (max-width:560px){ .ai-cnt button{width:40px;height:40px;} }
+  .ai-gw{display:inline-flex;align-items:center;gap:4px;flex:none;}
+  .ai-gs{width:36px;height:36px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);color:var(--lime);font-size:18px;font-weight:700;display:grid;place-items:center;flex:none;}
+  .ai-gs:active{background:var(--limesoft);}
+  @media (max-width:560px){ .ai-gs{width:40px;height:44px;} .ai-g input{width:58px;} }
