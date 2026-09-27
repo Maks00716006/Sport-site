@@ -241,7 +241,7 @@ const Chat = (function(){
     const res = await request(messages, signal);
     if(!res.ok || !res.body){
       let b = null; try { b = await res.json(); } catch(e){}
-      throw { ui:errText(res.status, b) };
+      throw { status:res.status, ui:errText(res.status, b) };
     }
     if(/application\/json/.test(res.headers.get('content-type') || '')){   // сервис ответил целиком, без стрима
       const j = await res.json();
@@ -300,7 +300,7 @@ const Chat = (function(){
     const m = body && (body.message || (body.error && body.error.message));
     if(cfg().mode === 'open'){
       if(status === 402 || status === 429) return 'ИИ сейчас занят или дневной бесплатный лимит закончился — попробуй чуть позже.';
-      if(status === 401 || status === 403) return 'ИИ сайта временно недоступен (проблема с ключом сайта). Напиши владельцу сайта.';
+      if(status === 401 || status === 403) return 'ИИ сайта временно недоступен (ключ не принят' + (m ? ': ' + m : '') + ').';
       if(status >= 500) return 'ИИ сейчас перегружен — попробуй через минуту.';
       return 'ИИ ответил ошибкой ' + status + ' — попробуй ещё раз.';
     }
@@ -367,6 +367,15 @@ const Chat = (function(){
         if(acc.trim()){ bub.innerHTML = md(acc); history.push({ role:'assistant', content:acc }); saveHist(); }
         else { el.remove(); }
         let msg = (e && e.ui) ? e.ui : 'Нет связи с ИИ. Проверь интернет и попробуй ещё раз.';
+        if(cfg().mode === 'open' && e && (e.status === 401 || e.status === 403)){
+          // ключ сайта не принят — сразу переключаемся на запасной бесплатный ИИ, чтобы чат не стоял
+          window.siteAI.broken = true;
+          loadPuter().catch(function(){});                           // грузим заранее — кнопка сработает с первого нажатия
+          if(!acc.trim()){ el.remove(); history.pop(); saveHist(); const mine = log().querySelectorAll('.msg.me'); if(mine.length) mine[mine.length - 1].remove(); }
+          pendingText = text;
+          showSignIn('ИИ сайта сейчас недоступен. Нажми «Подключить» — включится запасной бесплатный ИИ, и сообщение отправится.');
+          return;
+        }
         if(cfg().mode === 'puter' && !(e && e.ui)){
           const pe = puterErr(e);
           if(pe.funds) msg = 'Бесплатный лимит твоего аккаунта Puter закончился. Его можно пополнить на puter.com — или подожди, пока лимит обновится.';
