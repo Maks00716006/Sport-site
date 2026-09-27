@@ -10,7 +10,7 @@
    aiModels — модели по очереди: если первая недоступна или лимит на неё кончился — берётся следующая.
    aiVisionModels — модели для распознавания еды по фото (должны понимать картинки). */
 window.WSPORT_CONFIG = {
-  chatProvider: 'auto',
+  chatProvider: 'open',            // Puter просит номер телефона США — не используем
   aiBase: 'https://gen.pollinations.ai/v1',
   aiKey: '',
   aiModels: ['openai', 'openai-fast'],

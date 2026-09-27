@@ -35,7 +35,6 @@ const Chat = (function(){
     let mode = (window.WSPORT_CONFIG && window.WSPORT_CONFIG.chatProvider) || 'auto';
     const site = !!(window.siteAI && window.siteAI.ready());
     if(mode === 'auto') mode = site ? 'open' : 'puter';            // есть ключ сайта — никаких окон и входов
-    if(mode === 'open' && !site) mode = 'puter';
     if(mode === 'server' && !endpoint()) mode = 'puter';
     if(mode === 'key' && !c.apiKey) mode = 'puter';
     return { mode:mode, endpoint:c.endpoint || '', apiKey:c.apiKey || '', model:c.model || '' };
@@ -49,7 +48,7 @@ const Chat = (function(){
     // на GitHub Pages сервера нет — нужен адрес воркера в config.js
     return /github\.io$/.test(location.hostname) || location.protocol === 'file:' ? '' : '/api/chat';
   }
-  function ready(){ const c = cfg(); return c.mode === 'puter' || c.mode === 'open' ? true : c.mode === 'key' ? !!c.apiKey : !!endpoint(); }
+  function ready(){ const c = cfg(); return c.mode === 'puter' ? true : c.mode === 'open' ? !!(window.siteAI && window.siteAI.ready()) : c.mode === 'key' ? !!c.apiKey : !!endpoint(); }
 
   /* ---------- Puter.js (бесплатный режим) ---------- */
   let puterP = null, pendingText = '';
@@ -203,7 +202,7 @@ const Chat = (function(){
     return el;
   }
   function showSetup(){
-    note('Этот режим ещё не настроен. Открой ⚙︎ и выбери «Бесплатно» — это работает сразу, без ключей.', 'warn');
+    note('ИИ-ментор скоро заработает — владелец сайта подключает ИИ. Загляни чуть позже.', 'warn');
   }
 
   /* ---------- отправка и стриминг ---------- */
@@ -367,7 +366,8 @@ const Chat = (function(){
         if(acc.trim()){ bub.innerHTML = md(acc); history.push({ role:'assistant', content:acc }); saveHist(); }
         else { el.remove(); }
         let msg = (e && e.ui) ? e.ui : 'Нет связи с ИИ. Проверь интернет и попробуй ещё раз.';
-        if(cfg().mode === 'open' && e && (e.status === 401 || e.status === 403)){
+        const auto = !window.WSPORT_CONFIG || !window.WSPORT_CONFIG.chatProvider || window.WSPORT_CONFIG.chatProvider === 'auto';
+        if(auto && cfg().mode === 'open' && e && (e.status === 401 || e.status === 403)){
           // ключ сайта не принят — сразу переключаемся на запасной бесплатный ИИ, чтобы чат не стоял
           window.siteAI.broken = true;
           loadPuter().catch(function(){});                           // грузим заранее — кнопка сработает с первого нажатия
