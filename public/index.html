@@ -184,6 +184,7 @@
       <div class="brand"><span class="dot"></span> WSPORT</div>
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:13px;color:var(--muted)" id="meNameM">Максим</span>
+        <button class="mprof" id="mProfile" type="button" aria-label="Профиль, серия и достижения" aria-controls="pdrawer"><span class="ava" id="mAva">M</span><span class="mfire" id="mFire"></span></button>
         <button class="btn sm ghost" type="button" id="logoutM">Выйти</button>
       </div>
     </div>
@@ -666,6 +667,13 @@
             <span class="aidrop-ph"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><b>Сфотографируй тарелку</b><small>Сверху, при хорошем свете, чтобы было видно всю порцию</small></span>
             <span class="aiscan"></span>
           </label>
+          <div class="aisrc">
+            <label class="btn ghost sm" for="aiFile"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Камера</label>
+            <label class="btn ghost sm">
+              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>Из галереи
+              <input id="aiFileGal" type="file" accept="image/*" hidden />
+            </label>
+          </div>
           <button class="btn wide" type="button" id="aiGo" disabled>Распознать блюдо и посчитать КБЖУ</button>
           <div id="aiResult"></div>
           <details class="aicfg" id="aiCfg">

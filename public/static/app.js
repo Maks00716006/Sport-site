@@ -237,6 +237,7 @@ function leave(){
 }
 $('logout').onclick = leave;
 $('logoutM').onclick = leave;
+if($('mProfile')) $('mProfile').onclick = function(){ openProfile(); };
 
 /* ================= navigation ================= */
 const IC = {
@@ -259,7 +260,10 @@ $('nav').innerHTML = TABS.map(function(t){
 }).join('');
 $('tabbar').innerHTML = TABS.map(function(t){
   return '<button type="button" data-go="' + t.id + '">' + IC[t.id] + '<span>' + t.short + '</span></button>';
-}).join('');
+}).join('') +
+  // на телефоне ИИ-ментор — отдельная вкладка внизу, а не плавающая кнопка поверх контента
+  '<button type="button" id="tabChat" aria-label="ИИ-ментор"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span>Ментор</span></button>';
+$('tabChat').onclick = function(){ if(typeof Chat !== 'undefined') Chat.show(); };
 
 /* Ленивая отрисовка: при входе сразу рисуется только открытая вкладка,
    остальные — когда браузер свободен (или в момент перехода на них). */
@@ -766,7 +770,7 @@ function renderWeight(){
     '<div class="kpi"><b>' + last.toFixed(1) + '</b><span>сейчас, кг</span></div>' +
     '<div class="kpi ' + (diff < 0 ? 'good' : diff > 0 ? 'bad' : '') + '"><b>' + (diff > 0 ? '+' : '') + diff.toFixed(1) + '</b><span>с начала</span></div>' +
     '<div class="kpi"><b>' + min.toFixed(1) + '</b><span>минимум</span></div>' +
-    '<div class="kpi"><b>' + w.length + '</b><span>взвешиваний</span></div>';
+    '<div class="kpi"><b>' + w.length + '</b><span>' + plural(w.length, 'взвешивание', 'взвешивания', 'взвешиваний') + '</span></div>';
   $('wList').innerHTML = w.slice().reverse().map(function(x, i, arr){
     const prev = arr[i+1];
     const d = prev ? +(x.kg - prev.kg).toFixed(1) : null;
@@ -913,7 +917,7 @@ function renderGym(){
     return '<article class="ecard">' +
       '<div class="ephoto"><img src="' + thumbSrc(e.img) + '" alt="' + esc(e.name) + '" loading="lazy" decoding="async" width="640" height="478" /><b>' + e.group + '</b>' +
         '<div class="bmap">' + bodySvg(e.view, e.mMain, e.mAlso) + '</div>' +
-        '<span class="mtag"><i class="dot"></i>' + esc(e.main) + '</span>' +
+        '<span class="mtag"><i class="dot"></i><span class="mt">' + esc(e.main) + '</span></span>' +
       '</div>' +
       '<div class="ebody">' +
         '<h3>' + esc(e.name) + '</h3>' +
@@ -1075,6 +1079,8 @@ function updateFab(){
   $('fabName').textContent = ME.name;
   $('fabSub').textContent = 'Достижения ' + (ME.profile.achDone || []).length + '/100';
   $('fabFire').innerHTML = FIRE + '<b>' + FoodStreak.get().current + '</b>';
+  // профиль в верхней панели (телефон)
+  if($('mAva')){ $('mAva').textContent = $('fabAva').textContent; $('mFire').innerHTML = FIRE + '<b>' + FoodStreak.get().current + '</b>'; }
 }
 
 let profileOpen = false, achCat = 'all';

@@ -890,6 +890,7 @@ function renderVisionCfg(){
 }
 function aiPreview(file){
   aiFile = file; aiItems = []; aiRunId++;
+  $('aiGo').textContent = 'Распознать блюдо и посчитать КБЖУ'; $('aiGo').classList.remove('ghost');
   $('aiDrop').classList.remove('scan');
   $('aiResult').innerHTML = '';
   if(!file){ $('aiDrop').classList.remove('has'); $('aiImg').removeAttribute('src'); return; }
@@ -911,6 +912,9 @@ async function aiRun(){
     if(!aiItems.length){ $('aiResult').innerHTML = '<div class="fhint warn">' + esc(out.note || 'Не удалось распознать еду. Сфоткай сверху при хорошем свете.') + '</div>'; return; }
     aiItems.forEach(function(x){ x.k = x.grams ? { kcal:x.kcal / x.grams, p:x.p / x.grams, f:x.f / x.grams, c:x.c / x.grams, s:x.s == null ? null : x.s / x.grams } : null; });
     renderAiItems(out);
+    $('aiGo').textContent = 'Распознать ещё раз'; $('aiGo').classList.add('ghost');
+    // на телефоне сразу показываем результат и кнопку «Добавить»
+    requestAnimationFrame(function(){ const t = $('aiAdd'); if(t && t.scrollIntoView) t.scrollIntoView({ block:'nearest', behavior:'smooth' }); });
   } catch(e){
     if(run !== aiRunId) return;
     const m = e && e.message || '';
@@ -1156,7 +1160,10 @@ function diaryInit(){
   $('bcCode').addEventListener('keydown', function(e){ if(e.key === 'Enter') lookupBarcode(this.value); });
   $('bcFile').addEventListener('change', function(){ if(this.files[0]) Scanner.fromImage(this.files[0]); this.value = ''; });
   // фото + ИИ
-  $('aiFile').addEventListener('change', function(){ aiPreview(this.files[0] || null); this.value = ''; });
+  // сфоткал или выбрал из галереи — сразу распознаём, без лишнего нажатия
+  const aiPick = function(){ const f = this.files[0] || null; this.value = ''; aiPreview(f); if(f && VisionAI.ready()) aiRun(); };
+  $('aiFile').addEventListener('change', aiPick);
+  if($('aiFileGal')) $('aiFileGal').addEventListener('change', aiPick);
   $('aiGo').onclick = aiRun;
   $('aiResult').addEventListener('input', function(e){
     const i = +e.target.dataset.i; if(isNaN(i)) return;

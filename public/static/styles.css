@@ -1294,3 +1294,80 @@
     .ai-n{flex:1 1 100%;}
     .ai-k{margin-left:auto;max-width:none;}
   }
+
+  /* ================= мобильные правки (аудит 320–430px) ================= */
+  .ephoto .mtag .mt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bcmanual input{min-width:0;}
+  .bcmanual .btn{flex:none;}
+  .pd-head .me{flex:1;min-width:0;}
+  .pd-head .me b,.pd-head .me span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+  .witem{min-width:0;}
+  @media (max-width:560px){
+    /* названия продуктов в дневнике — до 2 строк, а не обрезка на полуслове */
+    .ditem-t b{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;overflow-wrap:anywhere;}
+    .witem{gap:8px;padding:12px;}
+    .witem b{width:auto;min-width:0;white-space:nowrap;}
+    .witem span{white-space:nowrap;}
+  }
+  .sheet{min-width:0;}
+  .sheet > *,.sheet .field,.sheet label{min-width:0;}
+  select{max-width:100%;min-width:0;text-overflow:ellipsis;}
+  #progEx{width:100%;}
+  .prog-kpis .kpi{min-width:0;}
+  @media (max-width:560px){
+    .prog-kpis{gap:6px;}
+    .prog-kpis .kpi{padding:10px 8px;}
+    .prog-kpis .kpi b{font-size:17px;}
+    .prog-kpis .kpi span{font-size:9.5px;letter-spacing:.02em;white-space:normal;overflow-wrap:break-word;hyphens:auto;line-height:1.25;}
+  }
+  .field input,.field select,.field textarea{width:100%;min-width:0;max-width:100%;box-sizing:border-box;}
+  @media (max-width:900px){
+    .mtop .brand{flex:none;}
+    .mtop > div:last-child{min-width:0;}
+    .mtop #meNameM{max-width:calc(100vw - 240px);min-width:0;}
+  }
+  .sheetbody{grid-template-columns:minmax(0,1fr);}
+  @media (max-width:360px){
+    .sheethead{padding:18px 16px 0;}
+    .sheetbody{padding:14px 16px 18px;}
+    .seg button{padding-left:4px;padding-right:4px;}
+  }
+  /* фото еды: камера или галерея */
+  .aisrc{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 8px;}
+  .aisrc .btn{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;cursor:pointer;}
+  .aisrc svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none;}
+  /* пока открыто окно — страница под ним не прокручивается (особенно важно на iPhone) */
+  html:has(.modal.on),html:has(.modal.on) body{overflow:hidden;}
+  .sheet{overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+  @supports (height:100dvh){
+    .sheet{max-height:88dvh;}
+    @media (max-width:560px){ .sheet{max-height:92dvh;} }
+  }
+  .mtop{gap:10px;}
+
+  /* ============ телефон: без плавающих кнопок поверх контента ============
+     Профиль — аватар в верхней панели, ИИ-ментор — вкладка в нижнем меню.
+     Раньше круглые кнопки закрывали «+» у приёмов пищи и карточки. */
+  .mprof{display:none;}
+  #tabChat{display:none;}
+  @media (max-width:900px){
+    .pfab,.chatfab{display:none !important;}
+    .main{padding-bottom:calc(96px + env(safe-area-inset-bottom));}
+    .mtop{background:var(--bg,#0B0C0E);}
+    .mtop #meNameM{display:none;}
+    .mprof{display:inline-flex;position:relative;align-items:center;justify-content:center;width:44px;height:44px;border-radius:13px;flex:none;}
+    .mprof .ava{width:38px;height:38px;border-radius:12px;font-size:16px;display:grid;place-items:center;}
+    .mfire{position:absolute;right:-9px;top:-7px;display:inline-flex;align-items:center;gap:1px;padding:1px 5px 1px 3px;border-radius:9px;
+      font-size:10.5px;font-weight:800;color:#FFB547;background:#1E1A14;border:1px solid rgba(255,154,46,.4);line-height:1.3;}
+    .mfire svg{width:10px;height:10px;fill:#FF9A2E;}
+    .mfire:empty{display:none;}
+    #tabChat{display:flex;}
+    .tabbar button{flex:1 1 0;min-width:0;}
+  }
+  @media (max-width:900px){ .tabbar{background:#0E1012 !important;} }
+  @media (max-width:560px){
+    .macros{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+    .macro{padding:11px 10px;min-width:0;}
+    .macro b{font-size:20px;}
+    .macro span{font-size:12px;}
+  }
