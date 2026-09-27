@@ -80,13 +80,22 @@ window.siteAI = {
     let res = null, lastErr = null;
     for(let i = 0; i < list.length; i++){
       const b = Object.assign({}, body); if(list[i]) b.model = list[i];
+      // своё ограничение по времени на каждую попытку (если модель зависла — переходим к следующей)
+      const ctrl = new AbortController(), outer = opts && opts.signal;
+      const onAbort = function(){ ctrl.abort(); };
+      if(outer){ if(outer.aborted) ctrl.abort(); else outer.addEventListener('abort', onAbort); }
+      const timer = opts && opts.timeout ? setTimeout(function(){ ctrl.timedOut = true; ctrl.abort(); }, opts.timeout) : null;
       try {
         res = await fetch(c.aiBase.replace(/\/$/, '') + '/chat/completions', {
-          method:'POST', signal:opts && opts.signal,
+          method:'POST', signal:ctrl.signal,
           headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer ' + this.key() },
           body:JSON.stringify(b)
         });
-      } catch(e){ if(e && e.name === 'AbortError') throw e; lastErr = e; res = null; continue; }
+      } catch(e){
+        if(e && e.name === 'AbortError' && !ctrl.timedOut) throw e;        // остановил сам пользователь
+        lastErr = ctrl.timedOut ? Object.assign(new Error('timeout'), { ui:'ИИ слишком долго отвечает — попробуй ещё раз.' }) : e;
+        res = null; continue;
+      } finally { if(timer) clearTimeout(timer); }   // связь с кнопкой «стоп» оставляем — она должна прерывать и сам ответ
       if(res.ok){ this.lastModel = list[i]; return res; }
       if([400, 403, 404, 422].indexOf(res.status) >= 0) bad[list[i]] = 1;
       if(res.status === 401) return res;                          // ключ не подходит — другие модели не помогут

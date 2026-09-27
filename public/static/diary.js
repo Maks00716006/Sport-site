@@ -763,9 +763,13 @@ const VisionAI = {
   },
   saveCfg: function(c){ try { localStorage.setItem(this.key, JSON.stringify(c)); } catch(e){} },
   ready: function(){ const c = this.cfg(); return c.provider === 'site' ? true : c.provider === 'proxy' ? !!c.endpoint : !!c.apiKey; },
-  prompt: 'Ты нутрициолог. На фото еда. Определи каждое блюдо/продукт на тарелке, оцени вес порции в граммах по размеру посуды и приборов, ' +
-    'и посчитай калории, белки, жиры, углеводы и сахар (s, граммы; сахар всего, включая натуральный) для этого веса по стандартным таблицам. Названия — на русском. ' +
-    'Ответь ТОЛЬКО JSON без пояснений: {"dish":"общее название","items":[{"name":"...","grams":150,"kcal":0,"p":0,"f":0,"c":0,"s":0}],"confidence":0.0-1.0,"note":"короткое замечание, если оценка неточная"}. ' +
+  prompt: 'Ты опытный нутрициолог. На фото — еда (скорее всего домашняя, русская/европейская кухня). ' +
+    'Определи КАЖДЫЙ отдельный продукт или блюдо (гарнир, мясо, соус, хлеб, напиток — отдельными пунктами). ' +
+    'Оцени вес каждого в граммах по размеру посуды и приборов: обычная тарелка 24–26 см, ложка ~15 см, стакан 250 мл. ' +
+    'Учитывай способ приготовления (жареное — с маслом, салат — с заправкой, если она видна). ' +
+    'Посчитай для ЭТОГО веса (не на 100 г): калории kcal, белки p, жиры f, углеводы c и сахар s (всего сахара, включая натуральный) — по стандартным таблицам. ' +
+    'Проверь себя: kcal ≈ 4·p + 9·f + 4·c, сахар не больше углеводов. Названия — по-русски, коротко. Все числа — просто числа, без единиц. ' +
+    'Ответь ТОЛЬКО JSON без пояснений и без markdown: {"dish":"общее название","items":[{"name":"...","grams":150,"kcal":0,"p":0,"f":0,"c":0,"s":0}],"confidence":0.0-1.0,"note":"короткое замечание, если что-то плохо видно"}. ' +
     'Если на фото нет еды — {"dish":"","items":[],"confidence":0,"note":"На фото не видно еды"}.',
   downscale: function(file, max){
     return new Promise(function(ok, bad){
@@ -788,15 +792,26 @@ const VisionAI = {
   },
   providers: {
     // бесплатный ИИ сайта (ключ в static/config.js) — ничего настраивать не нужно
-    site: async function(dataUrl){
+    site: async function(dataUrl, c, skip){
+      const models = (await window.siteAI.models(true)).filter(function(m){ return !skip || skip.indexOf(m) < 0; });
       const r = await window.siteAI.fetch({ temperature:0.2,
         messages:[ { role:'system', content:VisionAI.prompt },
                    { role:'user', content:[ { type:'text', text:'Что на тарелке и сколько в этом КБЖУ и сахара? Ответь только JSON.' }, { type:'image_url', image_url:{ url:dataUrl } } ] } ] },
-        { vision:true });
+        { models:models, timeout:45000 });
       if(r.status === 402 || r.status === 429) throw new Error('ИИ сейчас занят или дневной лимит закончился — попробуй чуть позже.');
+      if(r.status === 401) throw new Error('ИИ сайта временно недоступен (ключ не принят).');
       if(!r.ok) throw new Error('Сервис распознавания ответил ошибкой ' + r.status + '.');
-      const j = await r.json();
-      return VisionAI.parseJson(j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content);
+      const used = window.siteAI.lastModel;
+      try {
+        const j = await r.json();
+        const m = j.choices && j.choices[0] && j.choices[0].message;
+        const text = m && (typeof m.content === 'string' ? m.content : (m.content || []).map(function(x){ return x.text || ''; }).join(''));
+        return VisionAI.parseJson(text);
+      } catch(e){
+        // ответ не в том формате — один раз пробуем следующую модель
+        if(!skip && used && models.length > 1) return VisionAI.providers.site(dataUrl, c, [used]);
+        throw e;
+      }
     },
     openai: async function(dataUrl, c){
       const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -817,19 +832,52 @@ const VisionAI = {
       return r.json();
     }
   },
+  // «150 г», «12,5», null → число (или null)
+  num: function(v){
+    if(v == null || v === '') return null;
+    if(typeof v === 'number') return isFinite(v) ? v : null;
+    const m = String(v).replace(',', '.').match(/-?\d+(\.\d+)?/);
+    return m ? parseFloat(m[0]) : null;
+  },
+  /* приводим ответ ИИ в порядок: числа, пределы, сверка калорий с БЖУ */
+  clean: function(items){
+    const n = VisionAI.num;
+    return (Array.isArray(items) ? items : []).slice(0, 12).map(function(x){
+      x = x || {};
+      const it = { name:String(x.name || x.title || 'Блюдо').trim().slice(0, 60) || 'Блюдо',
+        grams:Math.max(0, Math.min(3000, n(x.grams != null ? x.grams : x.weight) || 0)),
+        kcal:Math.max(0, n(x.kcal != null ? x.kcal : x.calories) || 0),
+        p:Math.max(0, n(x.p != null ? x.p : x.protein) || 0), f:Math.max(0, n(x.f != null ? x.f : x.fat) || 0), c:Math.max(0, n(x.c != null ? x.c : x.carbs) || 0) };
+      const s = n(x.s != null ? x.s : x.sugar);
+      it.s = s == null ? null : Math.max(0, s);
+      const byMacro = 4 * it.p + 9 * it.f + 4 * it.c;
+      if(!it.kcal && byMacro) it.kcal = Math.round(byMacro);                 // калорий нет — считаем из БЖУ
+      if(it.s != null && it.s > it.c) it.s = it.c;                           // сахара не бывает больше углеводов
+      // больше 9 ккал на грамм не бывает (даже у масла) — значит ИИ перепутал вес или посчитал на 100 г
+      // больше 9 ккал на грамм не бывает (даже у масла) — значит ИИ посчитал КБЖУ на 100 г, а не на порцию: пересчитываем
+      if(it.grams && it.kcal / it.grams > 9.2){
+        const k = it.grams / 100;
+        it.kcal = Math.round(it.kcal * k); it.p *= k; it.f *= k; it.c *= k; if(it.s != null) it.s *= k;
+        it.warn = true;
+      }
+      return it;
+    }).filter(function(it){ return it.kcal > 0 || it.grams > 0; });
+  },
   analyze: async function(file){
     const c = this.cfg();
     const fn = this.providers[c.provider];
     if(!fn || !this.ready()) throw new Error('need-config');
-    const dataUrl = await this.downscale(file, 1024);
+    const dataUrl = await this.downscale(file, 896);   // хватает для распознавания и экономит лимит
     const out = await fn(dataUrl, c);
-    out.items = (out.items || []).map(function(x){
-      return { name:String(x.name || 'Блюдо'), grams:Math.max(0, +x.grams || 0), kcal:Math.max(0, +x.kcal || 0), p:Math.max(0, +x.p || 0), f:Math.max(0, +x.f || 0), c:Math.max(0, +x.c || 0), s:(x.s == null || x.s === '') ? null : Math.max(0, +x.s || 0) };
-    });
+    out.items = VisionAI.clean(out.items);
+    out.dish = out.dish ? String(out.dish).slice(0, 80) : '';
+    out.note = out.note ? String(out.note).slice(0, 200) : '';
+    const conf = VisionAI.num(out.confidence);
+    out.confidence = conf == null ? null : Math.min(1, Math.max(0, conf > 1 ? conf / 100 : conf));
     return out;
   }
 };
-let aiFile = null, aiItems = [];
+let aiFile = null, aiItems = [], aiRunId = 0;
 function renderVisionCfg(){
   const c = VisionAI.cfg();
   if($('aiProvSite')) $('aiProvSite').style.display = VisionAI.site() ? '' : 'none';
@@ -841,7 +889,8 @@ function renderVisionCfg(){
   $('aiCfgState').textContent = VisionAI.ready() ? (c.provider === 'site' ? 'бесплатный ИИ сайта' : c.provider === 'openai' ? 'OpenAI · ' + (c.model || 'gpt-4o-mini') : 'свой сервер') : 'не настроено';
 }
 function aiPreview(file){
-  aiFile = file; aiItems = [];
+  aiFile = file; aiItems = []; aiRunId++;
+  $('aiDrop').classList.remove('scan');
   $('aiResult').innerHTML = '';
   if(!file){ $('aiDrop').classList.remove('has'); $('aiImg').removeAttribute('src'); return; }
   $('aiImg').src = URL.createObjectURL(file);
@@ -853,15 +902,25 @@ async function aiRun(){
   if(!VisionAI.ready()){ $('aiCfg').open = true; $('aiResult').innerHTML = '<div class="fhint warn">Чтобы ИИ распознал блюдо, вставь ключ API в настройках ниже (один раз).</div>'; return; }
   $('aiDrop').classList.add('scan'); $('aiGo').disabled = true;
   $('aiResult').innerHTML = '<div class="fhint"><span class="spin"></span> ИИ смотрит на тарелку, определяет блюда и вес порции…</div>';
+  const run = ++aiRunId, file = aiFile;
   try {
-    const out = await VisionAI.analyze(aiFile);
+    const out = await VisionAI.analyze(file);
+    if(run !== aiRunId || file !== aiFile) return;                  // пока думал, выбрали другое фото — этот ответ не нужен
     aiItems = out.items;
+    if(aiItems.some(function(x){ return x.warn; })) out.note = (out.note ? out.note + ' ' : '') + 'Проверь вес — ИИ мог ошибиться.';
     if(!aiItems.length){ $('aiResult').innerHTML = '<div class="fhint warn">' + esc(out.note || 'Не удалось распознать еду. Сфоткай сверху при хорошем свете.') + '</div>'; return; }
     aiItems.forEach(function(x){ x.k = x.grams ? { kcal:x.kcal / x.grams, p:x.p / x.grams, f:x.f / x.grams, c:x.c / x.grams, s:x.s == null ? null : x.s / x.grams } : null; });
     renderAiItems(out);
   } catch(e){
-    $('aiResult').innerHTML = '<div class="fhint warn">' + esc(e.message === 'need-config' ? 'Нужен ключ API — открой настройки ниже.' : e.message === 'Failed to fetch' ? 'Нет связи с сервисом распознавания.' : e.message) + '</div>';
-  } finally { $('aiDrop').classList.remove('scan'); $('aiGo').disabled = false; }
+    if(run !== aiRunId) return;
+    const m = e && e.message || '';
+    $('aiResult').innerHTML = '<div class="fhint warn">' + esc(
+      m === 'need-config' ? 'Нужен ключ API — открой настройки ниже.' :
+      m === 'image' ? 'Не получилось открыть фото. Сфоткай ещё раз или выбери снимок в JPG/PNG.' :
+      /Failed to fetch|NetworkError|network|Load failed/i.test(m) ? 'Нет связи с сервисом распознавания. Проверь интернет и нажми ещё раз.' :
+      m === 'timeout' || (e && e.name === 'AbortError') ? 'ИИ слишком долго думал. Нажми «Распознать» ещё раз.' :
+      e instanceof SyntaxError || /формате/.test(m) ? 'ИИ ответил непонятно. Нажми «Распознать» ещё раз.' : m) + '</div>';
+  } finally { if(run === aiRunId){ $('aiDrop').classList.remove('scan'); $('aiGo').disabled = !aiFile; } }
 }
 function renderAiItems(out){
   const tot = aiItems.reduce(function(t, x){ return { kcal:t.kcal + x.kcal, p:t.p + x.p, f:t.f + x.f, c:t.c + x.c, s:t.s + (x.s || 0) }; }, { kcal:0, p:0, f:0, c:0, s:0 });
@@ -1066,7 +1125,15 @@ function diaryInit(){
     if(r){ const k = r.dataset.key; showPortion(k[0] === 'l' ? fLocalList[+k.slice(1)] : fOffList[+k.slice(1)]); return; }
     const c = e.target.closest('#fpChips .chip'); if(c){ $('fpAmount').value = c.dataset.v; updatePortion(); return; }
     if(e.target.closest('#aiAdd')){
-      aiItems.forEach(function(x){ addFoodToDiary(dDate, fMealSel, { name:x.name, brand:'распознано по фото', grams:x.grams || null, portion:x.grams ? null : '1 порция', kcal:r1(x.kcal), p:r1(x.p), f:r1(x.f), c:r1(x.c), s:x.s == null ? null : r1(x.s), src:'ai' }); });
+      const add = aiItems.filter(function(x){ return x.kcal > 0 || x.grams > 0; });
+      if(!add.length){ toast('Нечего добавлять — укажи вес'); return; }
+      add.forEach(function(x){
+        const name = String(x.name || '').trim() || 'Блюдо';
+        const item = { name:name, brand:'распознано по фото', grams:x.grams || null, portion:x.grams ? null : '1 порция', kcal:Math.round(x.kcal), p:r1(x.p), f:r1(x.f), c:r1(x.c), s:x.s == null ? null : r1(x.s), src:'ai' };
+        // база на 100 г — чтобы блюдо появилось в «Недавних» и его можно было добавить снова в пару нажатий
+        if(x.grams) item.base = { id:'ai-' + name.toLowerCase(), name:name, kcal:Math.round(x.kcal / x.grams * 100), p:r1(x.p / x.grams * 100), f:r1(x.f / x.grams * 100), c:r1(x.c / x.grams * 100), s:x.s == null ? null : r1(x.s / x.grams * 100), per100:true, src:'ai' };
+        addFoodToDiary(dDate, fMealSel, item);
+      });
       closeFoodModal();
     }
   });
@@ -1095,7 +1162,8 @@ function diaryInit(){
     const i = +e.target.dataset.i; if(isNaN(i)) return;
     const x = aiItems[i];
     if(e.target.classList.contains('ai-n')){ x.name = e.target.value; return; }
-    const g = Math.max(0, +e.target.value || 0);
+    const g = Math.max(0, Math.min(3000, +e.target.value || 0));
+    if(!x.k && x.grams === 0 && g > 0 && x.kcal > 0){ x.grams = g; x.k = { kcal:x.kcal / g, p:x.p / g, f:x.f / g, c:x.c / g, s:x.s == null ? null : x.s / g }; }
     if(x.k){ x.kcal = x.k.kcal * g; x.p = x.k.p * g; x.f = x.k.f * g; x.c = x.k.c * g; if(x.k.s != null) x.s = x.k.s * g; }
     x.grams = g;
     const k = e.target.closest('.ai-row').querySelector('.ai-k');

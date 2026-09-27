@@ -1283,3 +1283,14 @@
     #dayTotal{grid-template-columns:repeat(2,minmax(0,1fr));}
     #dayTotal .kpi:last-child{grid-column:1 / -1;}
   }
+
+  /* окно «Добавить еду»: содержимое никогда не шире окна (фото + результат ИИ на телефоне) */
+  .fsheet,#fMain,.fpane,#aiResult{min-width:0;max-width:100%;}
+  .aidrop{min-width:0;max-width:100%;}
+  .ai-row{min-width:0;}
+  .ai-k{min-width:0;flex:none;max-width:44%;}
+  @media (max-width:560px){
+    .ai-row{flex-wrap:wrap;row-gap:4px;}
+    .ai-n{flex:1 1 100%;}
+    .ai-k{margin-left:auto;max-width:none;}
+  }

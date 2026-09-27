@@ -12,7 +12,7 @@
    в модель уходят последние 30 — чтобы ИИ помнил контекст. */
 const Chat = (function(){
   const CFG_KEY = 'wsport-chat-cfg';
-  const HIST_MAX = 60, SEND_MAX = 30;
+  const HIST_MAX = 60, SEND_MAX = 14;   // в ИИ уходят только последние 14 сообщений — экономит лимит
   let history = [], streaming = null, open = false, promptMod = null;
 
   const IC = {
@@ -283,7 +283,7 @@ const Chat = (function(){
     const c = cfg();
     if(c.mode === 'open'){
       const p = await getPrompt();
-      return window.siteAI.fetch({ messages:[{ role:'system', content:p.SYSTEM_PROMPT }].concat(messages), stream:true }, { signal:signal });
+      return window.siteAI.fetch({ messages:[{ role:'system', content:p.SYSTEM_PROMPT }].concat(messages), stream:true }, { signal:signal, timeout:40000 });
     }
     if(c.mode === 'key'){
       const p = await getPrompt();
