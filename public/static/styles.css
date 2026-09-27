@@ -1380,3 +1380,13 @@
   .ai-gs{width:36px;height:36px;border-radius:9px;background:var(--panel2);border:1px solid var(--line);color:var(--lime);font-size:18px;font-weight:700;display:grid;place-items:center;flex:none;}
   .ai-gs:active{background:var(--limesoft);}
   @media (max-width:560px){ .ai-gs{width:40px;height:44px;} .ai-g input{width:58px;} }
+  /* штрих-кода нет в базах — карточка «сфоткай этикетку» */
+  .bcnf{display:grid;gap:10px;margin-top:10px;padding:14px;border-radius:14px;background:var(--limesoft);border:1px solid rgba(201,244,92,.3);animation:fade .2s ease;}
+  .bcnf b{font-size:15px;color:var(--lime);}
+  .bcnf span{font-size:13px;color:#C9D0D8;line-height:1.45;}
+  .bcnf .btn{display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;}
+  .bcnf .btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;}
+  .bcnf-gal{justify-self:center;font-size:13px;cursor:pointer;}
+  .bcnf-alt{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .bcnf-alt .btn{min-height:44px;}
+  .bcnf .busy{opacity:.55;pointer-events:none;}

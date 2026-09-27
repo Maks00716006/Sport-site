@@ -277,6 +277,7 @@ function openFoodModal(meal){
   showPortion(null);
   $('fQ').value = '';
   $('fNotFound').style.display = 'none';
+  if($('bcNf')) $('bcNf').style.display = 'none';
   renderLocalResults('');
   $('fOffRes').innerHTML = '';
   $('fOffStatus').textContent = '';
@@ -350,31 +351,113 @@ function renderLocalResults(q){
 /* ---- OpenFoodFacts: база продуктов со штрих-кодами, в т.ч. российских ----
    Лимиты OFF: 15 запросов/мин на товар и 10/мин на поиск, поиск «на каждую букву» запрещён —
    поэтому поиск по магазинным товарам запускается по кнопке или Enter и кэшируется. */
+/* ---- варианты записи одного штрих-кода: UPC-A (12) = EAN-13 с ведущим нулём, UPC-E (8) → UPC-A ---- */
+function upcEtoA(e){
+  if(!/^[01]\d{7}$/.test(e)) return null;
+  const d = e.slice(1, 7), ns = e[0], chk = e[7], l = d[5];
+  let m;
+  if(l <= '2') m = d.slice(0, 2) + l + '0000' + d.slice(2, 5);
+  else if(l === '3') m = d.slice(0, 3) + '00000' + d.slice(3, 5);
+  else if(l === '4') m = d.slice(0, 4) + '00000' + d[4];
+  else m = d.slice(0, 5) + '0000' + l;
+  return ns + m + chk;
+}
+function codeVariants(code){
+  const out = [code];
+  const add = function(c){ if(c && out.indexOf(c) < 0) out.push(c); };
+  if(code.length === 12) add('0' + code);
+  if(code.length === 13 && code[0] === '0') add(code.slice(1));
+  if(code.length === 14 && code[0] === '0') add(code.slice(1));
+  if(code.length === 8){ const a = upcEtoA(code); if(a){ add(a); add('0' + a); } }
+  return out;
+}
+/* ---- «Мои штрих-коды»: всё, что уже находили или добавляли на этом телефоне ----
+   Товар, найденный в базе, распознанный по фото этикетки или введённый вручную с кодом,
+   сохраняется — следующий скан находит его мгновенно, даже без интернета. */
+const MyBarcodes = {
+  key:'wsport-my-barcodes-v1', max:600,
+  all: function(){ try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch(e){ return {}; } },
+  get: function(code){
+    const a = this.all(), vs = codeVariants(code);
+    for(let i = 0; i < vs.length; i++) if(a[vs[i]]) return Object.assign({}, a[vs[i]], { code:code });
+    return null;
+  },
+  put: function(p){
+    if(!p || !p.code || p.kcal == null) return;
+    const a = this.all();
+    a[p.code] = { id:'b' + p.code, code:p.code, name:p.name, brand:p.brand || '', qty:p.qty || '', kcal:p.kcal, p:p.p, f:p.f, c:p.c, s:p.s == null ? null : p.s,
+      per100:true, portion:p.portion || 100, src:p.src || 'my', ru:!!p.ru, cat:p.cat || '', at:Date.now() };
+    const keys = Object.keys(a);
+    if(keys.length > this.max) keys.sort(function(x, y){ return a[x].at - a[y].at; }).slice(0, keys.length - this.max).forEach(function(k){ delete a[k]; });
+    try { localStorage.setItem(this.key, JSON.stringify(a)); } catch(e){}
+  }
+};
+/* ---- USDA FoodData Central: огромная база товаров США и импорта (запасной источник) ---- */
+const USDA = {
+  key: function(){ return (window.WSPORT_CONFIG && window.WSPORT_CONFIG.usdaKey) || 'DEMO_KEY'; },
+  byBarcode: async function(code){
+    const want = code.replace(/^0+/, '');
+    const r = await fetch('https://api.nal.usda.gov/fdc/v1/foods/search?api_key=' + this.key() + '&dataType=Branded&pageSize=10&query=' + encodeURIComponent(code), { signal:OFF.timeout(10000) });
+    if(!r.ok) return null;
+    const j = await r.json();
+    const f = (j.foods || []).find(function(x){ return String(x.gtinUpc || '').replace(/^0+/, '') === want; });
+    if(!f) return null;
+    const nut = function(num){ const x = (f.foodNutrients || []).find(function(n){ return String(n.nutrientNumber) === num; }); return x && x.value != null ? +x.value : null; };
+    let kcal = nut('208'); if(kcal == null && nut('268') != null) kcal = nut('268') / 4.184;
+    if(kcal == null) return null;
+    const title = String(f.description || '').toLowerCase().replace(/(^|\s)\S/g, function(t){ return t.toUpperCase(); });
+    const sg = String(f.servingSizeUnit || '').toLowerCase() === 'g' ? Math.round(+f.servingSize) : 0;
+    return { id:'u' + code, code:code, name:title || 'Товар ' + code, brand:f.brandName || f.brandOwner || '', qty:f.packageWeight || '',
+      kcal:r1(kcal), p:r1(nut('203') || 0), f:r1(nut('204') || 0), c:r1(nut('205') || 0), s:nut('269') == null ? null : r1(nut('269')),
+      per100:true, portion:sg || 100, src:'usda', ru:false, cat:'' };
+  }
+};
+
 const OFF = {
-  fields: 'code,product_name,product_name_ru,generic_name_ru,brands,quantity,serving_quantity,nutriments,countries_tags',
+  fields: 'code,product_name,product_name_ru,generic_name_ru,generic_name,brands,quantity,serving_quantity,nutriments,countries_tags',
   timeout: function(ms){ const c = new AbortController(); setTimeout(function(){ c.abort(); }, ms); return c.signal; },
   parse: function(p){
     if(!p) return null;
     const n = p.nutriments || {};
-    let kcal = n['energy-kcal_100g'];
-    if(kcal == null && n.energy_100g != null) kcal = n.energy_100g / 4.184;
-    const name = p.product_name_ru || p.product_name || p.generic_name_ru || '';
+    const sq = +p.serving_quantity || 0;
+    // значение на 100 г; если на упаковке указано только «на порцию» — пересчитываем через вес порции
+    const v100 = function(k){
+      const a = n[k + '_100g'];
+      if(a != null && a !== '') return +a;
+      const sv = n[k + '_serving'];
+      return (sv != null && sv !== '' && sq > 0) ? +sv * 100 / sq : null;
+    };
+    let kcal = v100('energy-kcal');
+    if(kcal == null){ const kj = v100('energy'); if(kj != null) kcal = kj / 4.184; }
+    const name = p.product_name_ru || p.product_name || p.generic_name_ru || p.generic_name || '';
     if(kcal == null || !name) return null;
     const brand = (p.brands || '').split(',')[0].trim();
     const ru = (p.countries_tags || []).indexOf('en:russia') >= 0 || /^46\d/.test(p.code || '');
-    return { id:'o' + p.code, code:p.code, name:name.trim(), brand:brand, kcal:r1(+kcal), p:r1(+(n.proteins_100g || 0)), f:r1(+(n.fat_100g || 0)), c:r1(+(n.carbohydrates_100g || 0)),
-      s:(n.sugars_100g != null && n.sugars_100g !== '') ? r1(+n.sugars_100g) : null,
+    const sug = v100('sugars');
+    return { id:'o' + p.code, code:p.code, name:name.trim(), brand:brand, kcal:r1(+kcal), p:r1(v100('proteins') || 0), f:r1(v100('fat') || 0), c:r1(v100('carbohydrates') || 0),
+      s:sug == null ? null : r1(sug),
       per100:true, portion:Math.round(+p.serving_quantity) || 100, qty:p.quantity || '', src:'off', ru:ru, cat:ru ? 'Россия' : '' };
   },
+  /* ищем по всем вариантам записи кода (EAN-13 / UPC-A с нулём и без). Если товар есть, но без КБЖУ —
+     возвращаем { partial } с названием, чтобы подставить его при фото этикетки */
   byBarcode: async function(code){
-    const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) + '.json?lc=ru&cc=ru&app_name=WSPORT&fields=' + this.fields;
-    const res = await fetch(url, { signal:this.timeout(12000) });
-    if(res.status === 404) return null;
-    if(res.status === 429) throw new Error('rate');
-    if(!res.ok) throw new Error('http ' + res.status);
-    const j = await res.json();
-    if(j.status !== 1 && j.status !== 'success') return null;
-    return this.parse(j.product);
+    let partial = null;
+    const vs = codeVariants(code);
+    for(let i = 0; i < vs.length; i++){
+      const url = 'https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(vs[i]) + '.json?lc=ru&cc=ru&app_name=WSPORT&fields=' + this.fields;
+      const res = await fetch(url, { signal:this.timeout(12000) });
+      if(res.status === 404) continue;
+      if(res.status === 429) throw new Error('rate');
+      if(!res.ok) throw new Error('http ' + res.status);
+      const j = await res.json();
+      if(j.status !== 1 && j.status !== 'success') continue;
+      const p = this.parse(j.product);
+      if(p){ p.code = code; return p; }
+      const pr = j.product || {};
+      const nm = pr.product_name_ru || pr.product_name || pr.generic_name_ru || pr.generic_name || '';
+      if(nm && !partial) partial = { partial:true, code:code, name:nm.trim(), brand:(pr.brands || '').split(',')[0].trim(), qty:pr.quantity || '' };
+    }
+    return partial;
   },
   search: async function(q){
     const key = normTxt(q);
@@ -468,6 +551,8 @@ function addManual(){
   const per100 = segGet('fmMode') === '100';
   const k = per100 ? g / 100 : 1;
   if(per100 && !g){ toast('Укажи вес порции'); return; }
+  // ввёл КБЖУ для штрих-кода — запоминаем товар, следующий скан найдёт его сразу
+  if($('fmCode').value && per100) MyBarcodes.put({ code:$('fmCode').value, name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], s:sKnown ? vals[4] : null, portion:g || 100, src:'manual' });
   addFoodToDiary(dDate, fMealSel, {
     name:name, brand:$('fmCode').value ? 'штрих-код ' + $('fmCode').value : '', grams:g || null, portion:g ? null : '1 порция',
     kcal:r1(vals[0] * k), p:r1(vals[1] * k), f:r1(vals[2] * k), c:r1(vals[3] * k), s:sKnown ? r1(vals[4] * k) : null, src:'manual',
@@ -488,6 +573,10 @@ function addManual(){
    Код принимается после двух одинаковых чтений подряд и проверки контрольной цифры EAN. */
 const SCAN_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];
 function eanValid(code){
+  if(code.length === 8 && !eanCheck(code)){ const a = upcEtoA(code); return !!a && eanCheck(a); }   // UPC-E
+  return eanCheck(code);
+}
+function eanCheck(code){
   if(!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
   const d = code.split('').map(Number), chk = d.pop();
   const sum = d.reverse().reduce(function(s, v, i){ return s + v * (i % 2 === 0 ? 3 : 1); }, 0);
@@ -719,27 +808,79 @@ async function lookupBarcode(code){
   if(!eanValid(code)){ bcStatus('Проверь цифры: это не штрих-код EAN-13/EAN-8 — контрольная цифра не сходится.', 'warn'); return; }
   if(bcLookupBusy) return;
   bcLookupBusy = true; $('bcFind').disabled = true;
-  bcStatus('<span class="spin"></span> Ищу товар ' + code + (/^46\d/.test(code) ? ' (российский)' : '') + '…');
+  $('bcNf').style.display = 'none';
+  const found = function(p, where){ bcStatus('Нашёл' + (where ? ' (' + where + ')' : '') + ': ' + esc(p.name), 'ok'); Scanner.stop(); MyBarcodes.put(p); showPortion(p); };
+  // 1) уже находили/добавляли на этом телефоне — мгновенно, без интернета
+  const mine = MyBarcodes.get(code);
+  if(mine){ bcLookupBusy = false; $('bcFind').disabled = false; found(mine, 'сохранён у тебя'); return; }
+  bcStatus('<span class="spin"></span> Ищу товар ' + code + (/^4[6-8]\d/.test(code) ? ' (' + bcCountry(code) + ')' : '') + '…');
+  let partial = null, offline = false, rate = false;
   try {
-    const p = await OFF.byBarcode(code);
-    if(p){ bcStatus('Нашёл: ' + esc(p.name), 'ok'); Scanner.stop(); showPortion(p); return; }
-    barcodeNotFound(code);
-  } catch(e){
-    if(e.message === 'rate'){ bcStatus('Слишком много сканов подряд — подожди минуту.', 'warn'); }
-    else { barcodeNotFound(code, true); }
+    // 2) OpenFoodFacts — мировая открытая база (в т.ч. российские товары)
+    try {
+      const p = await OFF.byBarcode(code);
+      if(p && !p.partial){ found(p); return; }
+      partial = p;
+    } catch(e){ if(e.message === 'rate') rate = true; else offline = true; }
+    // 3) USDA — товары США и импорт (российских там нет, поэтому коды 46x/48x не спрашиваем)
+    if(!/^(46|47|48)/.test(code)){
+      bcStatus('<span class="spin"></span> В OpenFoodFacts нет — ищу в базе USDA…');
+      try { const u = await USDA.byBarcode(code); if(u){ if(partial && partial.name) u.name = partial.name; found(u, 'база USDA'); return; } } catch(e){}
+    }
+    if(rate && !partial){ bcStatus('Слишком много сканов подряд — подожди минуту.', 'warn'); return; }
+    barcodeNotFound(code, offline && !partial, partial);
   } finally { bcLookupBusy = false; $('bcFind').disabled = false; }
 }
-/* товара нет в базе (или база не ответила) — не ошибка: аккуратно переводим в текстовый поиск */
-function barcodeNotFound(code, offline){
+/* страна по префиксу GS1 — просто для подсказки */
+function bcCountry(code){
+  const p = +code.slice(0, 3);
+  if(p >= 460 && p <= 469) return 'российский';
+  if(p === 481) return 'белорусский'; if(p === 482) return 'украинский'; if(p === 487) return 'казахстанский';
+  if(p === 470) return 'киргизский'; if(p === 478) return 'узбекский'; if(p === 486) return 'грузинский'; if(p === 485) return 'армянский'; if(p === 476) return 'азербайджанский';
+  return '';
+}
+/* товара нет ни в одной базе — предлагаем самый надёжный путь: сфоткать этикетку, ИИ прочитает КБЖУ.
+   Результат сохраняется за этим штрих-кодом, в следующий раз скан найдёт его сразу. */
+let bcPending = null;
+function barcodeNotFound(code, offline, partial){
   Scanner.stop();
-  toast(offline ? 'База не ответила — найди товар по названию' : 'Товар не найден, попробуйте ввести вручную');
-  foodTab('search');
-  $('fNotFound').innerHTML = (offline ? 'База товаров сейчас недоступна.' : 'Штрих-кода <b>' + code + '</b> пока нет в открытой базе.') +
-    ' Введи название продукта — или <button type="button" class="linkbtn" id="fNfManual">добавь свой с этим штрих-кодом</button>.';
-  $('fNotFound').style.display = '';
-  $('fNfManual').onclick = function(){ $('fmCode').value = code; $('fmName').value = $('fQ').value; foodTab('manual'); };
-  $('fQ').value = ''; renderLocalResults('');
-  setTimeout(function(){ $('fQ').focus(); }, 60);
+  bcPending = { code:code, name:partial && partial.name || '', brand:partial && partial.brand || '', qty:partial && partial.qty || '' };
+  bcStatus(offline ? 'База товаров сейчас не отвечает.' : (partial ? 'Нашёл «' + esc(partial.name) + '», но без КБЖУ в базе.' : 'Штрих-кода ' + code + ' нет в открытых базах.'), 'warn');
+  const ai = VisionAI.ready();
+  $('bcNf').innerHTML =
+    '<b>' + (partial ? 'Добавим КБЖУ за 5 секунд' : 'Добавим этот товар за 5 секунд') + '</b>' +
+    '<span>' + (ai ? 'Сфоткай на упаковке таблицу «Пищевая ценность» — ИИ прочитает калории, БЖУ и сахар. Товар запомнится: в следующий раз скан найдёт его сразу.'
+                   : 'Впиши КБЖУ с упаковки — товар запомнится за этим штрих-кодом.') + '</span>' +
+    (ai ? '<label class="btn wide bcnf-main"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Сфоткать этикетку<input id="bcLabelFile" type="file" accept="image/*" capture="environment" hidden /></label>' +
+          '<label class="linkbtn bcnf-gal">или выбрать фото из галереи<input id="bcLabelGal" type="file" accept="image/*" hidden /></label>' : '') +
+    '<div class="bcnf-alt"><button type="button" class="btn ghost sm" id="bcNfManual">Ввести вручную</button><button type="button" class="btn ghost sm" id="bcNfSearch">Найти по названию</button></div>';
+  $('bcNf').style.display = '';
+  const onPick = function(){ const f = this.files[0]; this.value = ''; if(f) readLabel(f); };
+  if($('bcLabelFile')) $('bcLabelFile').addEventListener('change', onPick);
+  if($('bcLabelGal')) $('bcLabelGal').addEventListener('change', onPick);
+  $('bcNfManual').onclick = function(){ $('fmCode').value = code; $('fmName').value = bcPending.name || ''; foodTab('manual'); };
+  $('bcNfSearch').onclick = function(){
+    foodTab('search'); $('fQ').value = bcPending.name || ''; renderLocalResults($('fQ').value);
+    if(bcPending.name) offSearch(); else setTimeout(function(){ $('fQ').focus(); }, 60);
+  };
+  requestAnimationFrame(function(){ if($('bcNf').scrollIntoView) $('bcNf').scrollIntoView({ block:'nearest', behavior:'smooth' }); });
+}
+async function readLabel(file){
+  const pend = bcPending; if(!pend) return;
+  $('bcNf').querySelectorAll('.btn,.linkbtn').forEach(function(b){ b.classList.add('busy'); });
+  bcStatus('<span class="spin"></span> ИИ читает этикетку…');
+  try {
+    const r = await VisionAI.label(file);
+    if(!r || r.kcal == null){ bcStatus('Не получилось прочитать КБЖУ. Сфоткай табличку «Пищевая ценность» ближе и ровнее — или введи вручную.', 'warn'); return; }
+    const p = { id:'b' + pend.code, code:pend.code, name:pend.name || r.name || 'Товар ' + pend.code, brand:pend.brand || r.brand || '', qty:pend.qty || r.qty || '',
+      kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:true, portion:r.portion || 100, src:'label', ru:/^46/.test(pend.code), cat:'' };
+    MyBarcodes.put(p);
+    bcStatus('Готово: ' + esc(p.name) + ' — запомнил за этим штрих-кодом.', 'ok');
+    $('bcNf').style.display = 'none';
+    showPortion(p);
+  } catch(e){
+    bcStatus(esc(e && e.message && !/^(image|timeout)$/.test(e.message) ? e.message : 'Не получилось прочитать фото. Попробуй ещё раз.'), 'warn');
+  } finally { $('bcNf').querySelectorAll('.busy').forEach(function(b){ b.classList.remove('busy'); }); }
 }
 
 /* ================= РАСПОЗНАВАНИЕ ЕДЫ ПО ФОТО (Vision AI) =================
@@ -878,6 +1019,37 @@ const VisionAI = {
       if(cnt != null && cnt >= 1 && cnt <= 30 && Math.round(cnt) === cnt && it.grams){ it.count = cnt; it.unit = it.grams / cnt; }
       return it;
     }).filter(function(it){ return it.kcal > 0 || it.grams > 0; });
+  },
+  /* фото этикетки → КБЖУ на 100 г */
+  labelPrompt: [
+    'На фото — упаковка продукта. Найди таблицу «Пищевая ценность» (Nutrition facts) и прочитай значения НА 100 г (или 100 мл).',
+    'Если указано только на порцию — пересчитай на 100 г по весу порции. Если энергия только в кДж — переведи в ккал (÷4.184).',
+    'Сахар: «в т.ч. сахара» / «sugars»; если не указан — null. Также прочитай название, бренд и вес упаковки, если видны.',
+    'Ответь ТОЛЬКО JSON без markdown: {"found":true,"name":"","brand":"","qty":"","portion":100,"per100":{"kcal":0,"p":0,"f":0,"c":0,"s":0}}.',
+    'Если таблицы не видно или она нечитаема — {"found":false}. Ничего не выдумывай.'
+  ].join(' '),
+  label: async function(file){
+    if(!this.site()) throw new Error('ИИ сайта не настроен — введи КБЖУ вручную.');
+    const dataUrl = await this.downscale(file, 1280);          // мелкий текст этикетки — берём фото покрупнее
+    const models = await window.siteAI.models(true);
+    const r = await window.siteAI.fetch({ temperature:0,
+      messages:[ { role:'system', content:VisionAI.labelPrompt },
+                 { role:'user', content:[ { type:'text', text:'Прочитай пищевую ценность с этикетки. Только JSON.' }, { type:'image_url', image_url:{ url:dataUrl } } ] } ] },
+      { models:models, timeout:45000 });
+    if(r.status === 402 || r.status === 429) throw new Error('ИИ сейчас занят или дневной лимит закончился — введи КБЖУ вручную.');
+    if(!r.ok) throw new Error('Сервис распознавания ответил ошибкой ' + r.status + '.');
+    const j = await r.json();
+    const m = j.choices && j.choices[0] && j.choices[0].message;
+    const o = VisionAI.parseJson(m && (typeof m.content === 'string' ? m.content : (m.content || []).map(function(x){ return x.text || ''; }).join('')));
+    if(!o || o.found === false) return null;
+    const h = o.per100 || o, n = VisionAI.num;
+    const kcal = n(h.kcal != null ? h.kcal : h.calories);
+    if(kcal == null || kcal < 0 || kcal > 950) return null;
+    const pr = n(h.p != null ? h.p : h.protein) || 0, fa = n(h.f != null ? h.f : h.fat) || 0, ca = n(h.c != null ? h.c : h.carbs) || 0;
+    let sg = n(h.s != null ? h.s : h.sugar); if(sg != null && sg > ca) sg = ca;
+    return { name:String(o.name || '').trim().slice(0, 80), brand:String(o.brand || '').trim().slice(0, 60), qty:String(o.qty || '').slice(0, 30),
+      portion:Math.min(1000, Math.max(0, Math.round(n(o.portion) || 0))) || 100,
+      kcal:r1(kcal), p:r1(Math.max(0, pr)), f:r1(Math.max(0, fa)), c:r1(Math.max(0, ca)), s:sg == null ? null : r1(Math.max(0, sg)) };
   },
   analyze: async function(file){
     const c = this.cfg();

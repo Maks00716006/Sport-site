@@ -645,7 +645,7 @@
             <div class="bcshade"></div>
             <div class="bcframe"><i></i><i></i><i></i><i></i><span class="bcline"></span></div>
             <button type="button" class="bctorch" id="bcTorch" style="display:none" aria-label="Фонарик"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></button>
-            <div class="bcidle"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg><span>Наведи рамку на штрих-код — он распознается сам.<br>Товары ищутся в OpenFoodFacts (в т.ч. российские)</span></div>
+            <div class="bcidle"><svg viewBox="0 0 24 24"><path d="M3 5v14M6 5v14M10 5v14M13 5v14M17 5v14M21 5v14"/></svg><span>Наведи рамку на штрих-код — он распознается сам.<br>Ищу в мировых базах товаров. Нет нигде — сфоткаешь этикетку, ИИ прочитает КБЖУ</span></div>
           </div>
           <div class="bcbtns">
             <button class="btn" type="button" id="bcStart"><svg viewBox="0 0 24 24" class="bi"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Включить камеру</button>
@@ -653,6 +653,7 @@
             <label class="btn ghost bcfile">Фото штрих-кода<input id="bcFile" type="file" accept="image/*" capture="environment" hidden /></label>
           </div>
           <p class="bcstatus" id="bcStatus">Нажми «Включить камеру» и наведи на штрих-код на упаковке.</p>
+          <div class="bcnf" id="bcNf" style="display:none"></div>
           <div class="bcmanual">
             <input id="bcCode" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="14" placeholder="Цифры под штрих-кодом" aria-label="Цифры штрих-кода" />
             <button class="btn sm" type="button" id="bcFind">Найти</button>
