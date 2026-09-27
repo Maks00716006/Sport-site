@@ -15,6 +15,8 @@ window.WSPORT_CONFIG = {
   aiKey: 'enc:bnJrcGwyYjlvamNNa1FaOVJxV1JjUlk2OXlIc0pvSExfa3M=',
   aiPrefer:       ['Gemini 3.8 Flash', 'GPT-5.4 Mini', 'DeepSeek V4.1 Flash', 'GPT-5.4 Nano'],
   aiVisionPrefer: ['Gemini 3.8 Flash', 'GPT-5.4 Mini', 'GPT-5.4 Nano'],
+  // модели с поиском в интернете — для штрих-кодов, которых нет в открытых базах (ищет товар на сайтах магазинов)
+  aiSearchPrefer: ['Google Gemini 2.5 Flash Lite Search', 'Gemini Search', 'Perplexity Sonar', 'Sonar'],
   aiModels:       ['gemini-3.8-flash', 'gpt-5.4-mini', 'deepseek-v4.1-flash', 'gpt-5.4-nano', 'gemini-fast', 'openai', 'openai-fast'],
   aiVisionModels: ['gemini-3.8-flash', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gemini-fast', 'openai'],
   chatEndpoint: ''
@@ -54,6 +56,17 @@ window.siteAI = {
       return (this._list = list);
     } catch(e){ return (this._list = []); }
     finally { clearTimeout(t); }
+  },
+  /* модели с веб-поиском: сначала из aiSearchPrefer, затем любые с search/sonar/perplexity в названии */
+  searchModels: async function(){
+    const self = this, list = await this.catalog(), out = [];
+    ((window.WSPORT_CONFIG || {}).aiSearchPrefer || []).forEach(function(p){
+      const want = self.norm(p);
+      const hit = list.find(function(m){ return m.names.some(function(n){ return self.norm(n) === want; }); });
+      if(hit && out.indexOf(hit.id) < 0) out.push(hit.id);
+    });
+    list.forEach(function(m){ if(out.indexOf(m.id) < 0 && m.names.some(function(n){ return /search|sonar|perplexity/i.test(n); })) out.push(m.id); });
+    return out.filter(function(id){ return !(self.bad && self.bad[id]); }).slice(0, 3);
   },
   /* порядок моделей: сначала найденные по названиям из aiPrefer, затем запасные id */
   models: async function(vision){

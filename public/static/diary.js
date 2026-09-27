@@ -413,6 +413,37 @@ const USDA = {
   }
 };
 
+/* ---- поиск товара по штрих-коду в интернете через ИИ с веб-поиском (сайты магазинов, каталоги) ----
+   Нужен, когда товара нет в открытых базах: ИИ ищет код на сайтах и читает КБЖУ со страницы товара.
+   Работает, только если ключу сайта разрешена модель с поиском (см. aiSearchPrefer в config.js). */
+const WebBarcode = {
+  prompt: function(code){
+    return 'Найди в интернете продукт питания со штрих-кодом ' + code + ' (EAN/GTIN). Обязательно используй веб-поиск: сайты магазинов (Ozon, Wildberries, Перекрёсток, Магнит, Пятёрочка, ВкусВилл, Лента, Metro), каталоги штрих-кодов, сайт производителя. ' +
+      'Нужен ТОЧНО этот штрих-код, а не похожий товар. Возьми с найденной страницы название, бренд, вес/объём и пищевую ценность НА 100 г (ккал, белки, жиры, углеводы, в т.ч. сахара). ' +
+      'Если на странице КБЖУ на порцию — пересчитай на 100 г. Ничего не выдумывай: если точного совпадения по штрих-коду нет или нет КБЖУ — found:false. ' +
+      'Ответь ТОЛЬКО JSON без markdown: {"found":true,"barcode":"' + code + '","name":"","brand":"","qty":"","per100":{"kcal":0,"p":0,"f":0,"c":0,"s":null},"source":"адрес страницы"}';
+  },
+  byBarcode: async function(code){
+    if(!(window.siteAI && window.siteAI.ready())) return null;
+    const models = await window.siteAI.searchModels();
+    if(!models.length) return null;
+    const r = await window.siteAI.fetch({ temperature:0, messages:[{ role:'user', content:this.prompt(code) }] }, { models:models, timeout:45000 });
+    if(!r.ok) return null;
+    const j = await r.json();
+    const m = j.choices && j.choices[0] && j.choices[0].message;
+    let o; try { o = VisionAI.parseJson(m && (typeof m.content === 'string' ? m.content : (m.content || []).map(function(x){ return x.text || ''; }).join(''))); } catch(e){ return null; }
+    if(!o || o.found !== true) return null;
+    if(o.barcode && String(o.barcode).replace(/\D/g, '').replace(/^0+/, '') !== code.replace(/^0+/, '')) return null;   // нашёл другой товар
+    const h = o.per100 || {}, n = VisionAI.num;
+    const kcal = n(h.kcal);
+    if(kcal == null || kcal <= 0 || kcal > 950 || !o.name) return null;
+    const c = Math.max(0, n(h.c) || 0); let sg = n(h.s); if(sg != null && sg > c) sg = c;
+    return { id:'w' + code, code:code, name:String(o.name).trim().slice(0, 80), brand:String(o.brand || '').trim().slice(0, 60), qty:String(o.qty || '').slice(0, 30),
+      kcal:r1(kcal), p:r1(Math.max(0, n(h.p) || 0)), f:r1(Math.max(0, n(h.f) || 0)), c:r1(c), s:sg == null ? null : r1(Math.max(0, sg)),
+      per100:true, portion:100, src:'web', web:String(o.source || '').slice(0, 300), ru:/^46/.test(code), cat:'' };
+  }
+};
+
 const OFF = {
   fields: 'code,product_name,product_name_ru,generic_name_ru,generic_name,brands,quantity,serving_quantity,nutriments,countries_tags',
   timeout: function(ms){ const c = new AbortController(); setTimeout(function(){ c.abort(); }, ms); return c.signal; },
@@ -501,7 +532,8 @@ function showPortion(item){
   $('fMain').style.display = item ? 'none' : '';
   if(!item) return;
   $('fpName').textContent = item.name;
-  $('fpBrand').textContent = [item.brand, item.qty, item.code ? 'штрих-код ' + item.code : ''].filter(Boolean).join(' · ');
+  $('fpBrand').textContent = [item.brand, item.qty, item.code ? 'штрих-код ' + item.code : '',
+    item.src === 'web' ? 'найдено в интернете — сверь КБЖУ с упаковкой' : item.src === 'label' ? 'прочитано с этикетки' : item.src === 'usda' ? 'база USDA' : ''].filter(Boolean).join(' · ');
   $('fpPer').textContent = item.per100
     ? 'На 100 г: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s)
     : 'На 1 порцию: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s);
@@ -826,6 +858,14 @@ async function lookupBarcode(code){
     if(!/^(46|47|48)/.test(code)){
       bcStatus('<span class="spin"></span> В OpenFoodFacts нет — ищу в базе USDA…');
       try { const u = await USDA.byBarcode(code); if(u){ if(partial && partial.name) u.name = partial.name; found(u, 'база USDA'); return; } } catch(e){}
+    }
+    // 4) ищем в интернете (магазины, каталоги) через ИИ с веб-поиском
+    if(!offline && window.siteAI && window.siteAI.ready()){
+      bcStatus('<span class="spin"></span> В открытых базах нет — ищу товар в интернете (магазины, каталоги)…');
+      try {
+        const w = await WebBarcode.byBarcode(code);
+        if(w){ if(partial && partial.name) w.name = partial.name; w.warnWeb = true; found(w, 'найден в интернете — сверь с упаковкой'); return; }
+      } catch(e){}
     }
     if(rate && !partial){ bcStatus('Слишком много сканов подряд — подожди минуту.', 'warn'); return; }
     barcodeNotFound(code, offline && !partial, partial);
