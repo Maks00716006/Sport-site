@@ -329,10 +329,6 @@
         <div class="dbw">
           <div class="dbw-l"><span>Вес тела</span><b id="dBwVal">—</b></div>
           <button type="button" class="dspark" id="dBwProg" aria-label="График веса тела"><span id="dSpark"></span></button>
-          <div class="dbw-f">
-            <input id="dBwInput" type="number" inputmode="decimal" step="0.1" min="35" max="250" placeholder="75.0" aria-label="Вес тела, кг" />
-            <button class="btn sm" type="button" id="dBwSave">Записать</button>
-          </div>
         </div>
       </div>
 
@@ -701,10 +697,10 @@
           <div class="field"><label for="fmName">Название</label><input id="fmName" type="text" placeholder="Йогурт питьевой клубника" /></div>
           <input id="fmCode" type="hidden" />
           <div class="field"><label>КБЖУ указаны</label>
-            <div class="seg" id="fmMode"><button type="button" data-v="100" class="on">на 100 г (как на упаковке)</button><button type="button" data-v="portion">на всю порцию</button></div>
+            <div class="seg" id="fmMode"><button type="button" data-v="100" class="on">на 100 г/мл (как на упаковке)</button><button type="button" data-v="portion">на всю порцию</button></div>
           </div>
           <div class="row2">
-            <div class="field"><label for="fmGrams">Съел, г</label><input id="fmGrams" type="number" min="0" step="5" value="100" /></div>
+            <div class="field"><label for="fmGrams">Съел <span class="useg" id="fmUnit"><button type="button" data-v="g" class="on">г</button><button type="button" data-v="ml">мл</button></span></label><input id="fmGrams" type="number" min="0" step="5" value="100" inputmode="decimal" /></div>
             <div class="field"><label for="fmKcal">Калории</label><input id="fmKcal" type="number" min="0" step="1" /></div>
           </div>
           <div class="row4">
@@ -723,7 +719,7 @@
         <div><h4 id="fpName"></h4><p class="rmeta" id="fpBrand"></p><p class="rmeta" id="fpPer"></p></div>
         <div class="fp-amount">
           <button type="button" class="wbtn" id="fpMinus" aria-label="Меньше">−</button>
-          <label><input id="fpAmount" type="number" inputmode="decimal" min="0" /><span id="fpUnit">г</span></label>
+          <label><input id="fpAmount" type="number" inputmode="decimal" min="0" /><button type="button" id="fpUnit" class="fpunit" aria-label="Переключить граммы / миллилитры">г</button></label>
           <button type="button" class="wbtn" id="fpPlus" aria-label="Больше">+</button>
         </div>
         <div class="chips" id="fpChips"></div>
@@ -754,8 +750,9 @@
       </div>
       <div id="woRecentWrap"><div class="fsub">Недавние</div><div class="chips" id="woRecent"></div></div>
       <p class="wolast" id="woLast"></p>
-      <div class="sethead"><span>Подход</span><span>Повторы</span><span>Вес, кг</span><span></span></div>
+      <div class="sethead" id="woHead"><span>Подход</span><span id="woHR">Повторы</span><span id="woHK">Вес, кг</span><span></span></div>
       <div class="sets" id="woSets"></div>
+      <p class="woburn" id="woBurn"></p>
       <button class="btn ghost wide" type="button" id="woAddSet">+ Добавить подход</button>
       <button class="btn wide" type="button" id="woSave" disabled>Сохранить</button>
       <button class="linkbtn wo-next" type="button" id="woNext" style="display:none">Следующее упражнение →</button>

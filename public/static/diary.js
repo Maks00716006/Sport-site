@@ -171,7 +171,7 @@ function renderSummary(){
 }
 
 function foodLine(x){
-  const amount = x.grams ? Math.round(x.grams) + ' г' : (x.portion || '1 порция');
+  const amount = x.grams ? Math.round(x.grams) + ' ' + unitOf(x) : (x.portion || '1 порция');
   return amount + ' · Б ' + r1(x.p) + ' · Ж ' + r1(x.f) + ' · У ' + r1(x.c) + ' · Сахар ' + sv(x.s);
 }
 function renderMeals(flash){
@@ -211,19 +211,23 @@ function renderWorkout(flash){
   const d = dayData(dDate), list = d ? d.workout : [];
   const vol = list.reduce(function(s, w){ return s + woVolume(w); }, 0);
   const sets = list.reduce(function(s, w){ return s + w.sets.length; }, 0);
-  $('dWoSub').textContent = list.length
-    ? list.length + ' ' + plural(list.length, 'упражнение', 'упражнения', 'упражнений') + ' · ' + sets + ' ' + plural(sets, 'подход', 'подхода', 'подходов') + (vol ? ' · объём ' + Math.round(vol).toLocaleString('ru-RU') + ' кг' : '')
+  const burn = list.reduce(function(s, w){ return s + woBurn(w.name, w.sets); }, 0);
+  $('dWoSub').innerHTML = list.length
+    ? list.length + ' ' + plural(list.length, 'упражнение', 'упражнения', 'упражнений') + ' · ' + sets + ' ' + plural(sets, 'подход', 'подхода', 'подходов') + (vol ? ' · объём ' + Math.round(vol).toLocaleString('ru-RU') + ' кг' : '') +
+      (burn ? '<br><span class="woburn-sum">🔥 ≈ ' + burn + ' ккал сожжено</span>' : '')
     : 'Запиши упражнения, подходы и рабочие веса';
   $('dWoList').innerHTML = list.length ? list.map(function(w){
     return '<div class="ditem wo' + (w.id === flash ? ' flash' : '') + '" data-food="' + w.id + '">' +
-      '<div class="ditem-t"><b>' + esc(w.name) + '</b><div class="wsets">' + w.sets.map(function(st, i){ return '<span><i>' + (i + 1) + '</i>' + st.reps + (st.kg ? ' × ' + r1(st.kg) + ' кг' : ' повт.') + '</span>'; }).join('') + '</div></div>' +
+      '<div class="ditem-t"><b>' + esc(w.name) + ' <small class="wkcal">≈ ' + woBurn(w.name, w.sets) + ' ккал</small></b><div class="wsets">' + w.sets.map(function(st, i){
+        const k = woKind(w.name);
+        return '<span><i>' + (i + 1) + '</i>' + st.reps + (k.t === 'cardio' ? ' мин' : k.t === 'time' ? ' сек' : st.kg ? ' × ' + r1(st.kg) + ' кг' : ' повт.') + '</span>'; }).join('') + '</div></div>' +
       '<button type="button" class="ditem-e" aria-label="Изменить" onclick="openWorkoutModal(\'' + w.id + '\')">' + D_ICON.edit + '</button>' +
       '<button type="button" class="ditem-x" aria-label="Удалить" onclick="delWorkout(\'' + w.id + '\')">' + D_ICON.x + '</button></div>';
   }).join('') : '';
   // вес тела за выбранный день + мини-график
   const w = sortedW(), onDay = w.find(function(x){ return x.date === dDate; });
   $('dBwVal').textContent = onDay ? onDay.kg.toFixed(1) + ' кг' : (w.length ? 'последний: ' + w[w.length-1].kg.toFixed(1) + ' кг' : 'ещё не записан');
-  $('dBwInput').placeholder = w.length ? w[w.length-1].kg.toFixed(1) : '75.0';
+
   $('dSpark').innerHTML = sparkline(w.slice(-10).map(function(x){ return x.kg; }));
 }
 function delWorkout(id){
@@ -362,8 +366,8 @@ function hl(name, q){
 function resultRow(x, q, key){
   return '<button type="button" class="fres" data-key="' + key + '">' +
     '<span class="fres-t"><b>' + hl(x.name, q) + '</b><small>' + (x.brand ? esc(x.brand) + ' · ' : '') + (x.recent ? 'недавнее · ' : '') + (x.cat ? esc(x.cat) + ' · ' : '') +
-    'Б ' + x.p + ' · Ж ' + x.f + ' · У ' + x.c + ' · Сахар ' + sv(x.s) + (x.per100 ? ' на 100 г' : ' на порцию') + '</small></span>' +
-    '<span class="fres-k"><b>' + Math.round(x.kcal) + '</b><small>' + (x.per100 ? 'ккал/100 г' : 'ккал/порц.') + '</small></span></button>';
+    'Б ' + x.p + ' · Ж ' + x.f + ' · У ' + x.c + ' · Сахар ' + sv(x.s) + (x.per100 ? ' на 100 ' + unitOf(x) : ' на порцию') + '</small></span>' +
+    '<span class="fres-k"><b>' + Math.round(x.kcal) + '</b><small>' + (x.per100 ? 'ккал/100 ' + unitOf(x) : 'ккал/порц.') + '</small></span></button>';
 }
 let fLocalList = [], fOffList = [];
 function renderLocalResults(q){
@@ -380,6 +384,13 @@ function renderLocalResults(q){
 /* ---- OpenFoodFacts: база продуктов со штрих-кодами, в т.ч. российских ----
    Лимиты OFF: 15 запросов/мин на товар и 10/мин на поиск, поиск «на каждую букву» запрещён —
    поэтому поиск по магазинным товарам запускается по кнопке или Enter и кэшируется. */
+/* ---- граммы или миллилитры: напитки считаем в мл (КБЖУ «на 100 мл», плотность ≈ 1) ---- */
+const LIQUID_RE = /(^|[\s«"(,])(вода|минералк|газировк|сок|соки|нектар|морс|компот|молоко|кефир|ряженк|айран|тан\b|снежок|простокваш|напиток|напитк|лимонад|кола|cola|pepsi|пепси|спрайт|sprite|фанта|fanta|энергетик|квас|пиво|вино|шампанск|чай|кофе|капучино|латте|раф\b|какао|смузи|коктейл|бульон|питьев|water|juice|milk|drink|soda|beer|tea|coffee)/i;
+function isLiquid(name){ const n = String(name || ''); return LIQUID_RE.test(n) && !/сгущ|шоколад|конфет|печень|батончик|мороже|сухое молоко|порошок|сухой|зерн|молотый|растворим/i.test(n); }
+function unitOf(x){ return x && x.unit === 'ml' ? 'мл' : 'г'; }
+
+FOODS.forEach(function(f){ if(f.cat === 'Напитки' || isLiquid(f.name)) f.unit = 'ml'; });
+
 /* ---- варианты записи одного штрих-кода: UPC-A (12) = EAN-13 с ведущим нулём, UPC-E (8) → UPC-A ---- */
 function upcEtoA(e){
   if(!/^[01]\d{7}$/.test(e)) return null;
@@ -415,7 +426,7 @@ const MyBarcodes = {
     if(!p || !p.code || p.kcal == null) return;
     const a = this.all();
     a[p.code] = { id:'b' + p.code, code:p.code, name:p.name, brand:p.brand || '', qty:p.qty || '', kcal:p.kcal, p:p.p, f:p.f, c:p.c, s:p.s == null ? null : p.s,
-      per100:true, portion:p.portion || 100, src:p.src || 'my', ru:!!p.ru, cat:p.cat || '', at:Date.now() };
+      per100:true, portion:p.portion || 100, src:p.src || 'my', ru:!!p.ru, cat:p.cat || '', unit:p.unit === 'ml' ? 'ml' : 'g', at:Date.now() };
     const keys = Object.keys(a);
     if(keys.length > this.max) keys.sort(function(x, y){ return a[x].at - a[y].at; }).slice(0, keys.length - this.max).forEach(function(k){ delete a[k]; });
     try { localStorage.setItem(this.key, JSON.stringify(a)); } catch(e){}
@@ -438,7 +449,8 @@ const USDA = {
     const sg = String(f.servingSizeUnit || '').toLowerCase() === 'g' ? Math.round(+f.servingSize) : 0;
     return { id:'u' + code, code:code, name:title || 'Товар ' + code, brand:f.brandName || f.brandOwner || '', qty:f.packageWeight || '',
       kcal:r1(kcal), p:r1(nut('203') || 0), f:r1(nut('204') || 0), c:r1(nut('205') || 0), s:nut('269') == null ? null : r1(nut('269')),
-      per100:true, portion:sg || 100, src:'usda', ru:false, cat:'' };
+      per100:true, portion:sg || (/^(ml|mlt)$/i.test(String(f.servingSizeUnit || '')) ? Math.round(+f.servingSize) : 0) || 100, src:'usda', ru:false, cat:'',
+      unit:(/^(ml|mlt)$/i.test(String(f.servingSizeUnit || '')) || /beverage|juice|water|milk|drink|soda|coffee|tea/i.test(String(f.brandedFoodCategory || '')) || isLiquid(title)) ? 'ml' : 'g' };
   }
 };
 
@@ -450,7 +462,8 @@ const WebBarcode = {
     return 'Найди в интернете продукт питания со штрих-кодом ' + code + ' (EAN/GTIN). Обязательно используй веб-поиск: сайты магазинов (Ozon, Wildberries, Перекрёсток, Магнит, Пятёрочка, ВкусВилл, Лента, Metro), каталоги штрих-кодов, сайт производителя. ' +
       'Нужен ТОЧНО этот штрих-код, а не похожий товар. Возьми с найденной страницы название, бренд, вес/объём и пищевую ценность НА 100 г (ккал, белки, жиры, углеводы, в т.ч. сахара). ' +
       'Если на странице КБЖУ на порцию — пересчитай на 100 г. Ничего не выдумывай: если точного совпадения по штрих-коду нет или нет КБЖУ — found:false. ' +
-      'Ответь ТОЛЬКО JSON без markdown: {"found":true,"barcode":"' + code + '","name":"","brand":"","qty":"","per100":{"kcal":0,"p":0,"f":0,"c":0,"s":null},"source":"адрес страницы"}';
+      'Если это напиток или жидкость (вода, сок, молоко, кефир, энергетик и т. п.) — unit "ml" и значения на 100 мл, иначе unit "g". ' +
+      'Ответь ТОЛЬКО JSON без markdown: {"found":true,"barcode":"' + code + '","name":"","brand":"","qty":"","unit":"g","per100":{"kcal":0,"p":0,"f":0,"c":0,"s":null},"source":"адрес страницы"}';
   },
   byBarcode: async function(code){
     if(!(window.siteAI && window.siteAI.ready())) return null;
@@ -469,13 +482,22 @@ const WebBarcode = {
     const c = Math.max(0, n(h.c) || 0); let sg = n(h.s); if(sg != null && sg > c) sg = c;
     return { id:'w' + code, code:code, name:String(o.name).trim().slice(0, 80), brand:String(o.brand || '').trim().slice(0, 60), qty:String(o.qty || '').slice(0, 30),
       kcal:r1(kcal), p:r1(Math.max(0, n(h.p) || 0)), f:r1(Math.max(0, n(h.f) || 0)), c:r1(c), s:sg == null ? null : r1(Math.max(0, sg)),
-      per100:true, portion:100, src:'web', web:String(o.source || '').slice(0, 300), ru:/^46/.test(code), cat:'' };
+      per100:true, portion:100, src:'web', web:String(o.source || '').slice(0, 300), ru:/^46/.test(code), cat:'',
+      unit:(o.unit === 'ml' || /мл|ml|\bл\b/i.test(String(o.qty || '')) || isLiquid(o.name)) ? 'ml' : 'g' };
   }
 };
 
 const OFF = {
-  fields: 'code,product_name,product_name_ru,generic_name_ru,generic_name,brands,quantity,serving_quantity,nutriments,countries_tags',
+  fields: 'code,product_name,product_name_ru,generic_name_ru,generic_name,brands,quantity,serving_quantity,nutriments,countries_tags,categories_tags,product_quantity_unit,nutrition_data_per',
   timeout: function(ms){ const c = new AbortController(); setTimeout(function(){ c.abort(); }, ms); return c.signal; },
+  /* напиток? — объём на упаковке (мл/л), единица количества, категория или название */
+  liquid: function(p, name){
+    if(/\d\s*(мл|ml|л|l|cl|сл)\b/i.test(String(p.quantity || ''))) return true;
+    if(/^(ml|l|cl|мл|л)$/i.test(String(p.product_quantity_unit || ''))) return true;
+    if(/ml/i.test(String(p.nutrition_data_per || ''))) return true;
+    if((p.categories_tags || []).some(function(t){ return /en:(beverages|waters|juices|milks|plant-based-milks|sodas|energy-drinks|drinkable-yogurts|kefirs|teas|coffees|beers|wines|nectars)/.test(t); })) return true;
+    return isLiquid(name);
+  },
   parse: function(p){
     if(!p) return null;
     const n = p.nutriments || {};
@@ -496,7 +518,8 @@ const OFF = {
     const sug = v100('sugars');
     return { id:'o' + p.code, code:p.code, name:name.trim(), brand:brand, kcal:r1(+kcal), p:r1(v100('proteins') || 0), f:r1(v100('fat') || 0), c:r1(v100('carbohydrates') || 0),
       s:sug == null ? null : r1(sug),
-      per100:true, portion:Math.round(+p.serving_quantity) || 100, qty:p.quantity || '', src:'off', ru:ru, cat:ru ? 'Россия' : '' };
+      per100:true, portion:Math.round(+p.serving_quantity) || 100, qty:p.quantity || '', src:'off', ru:ru, cat:ru ? 'Россия' : '',
+      unit:OFF.liquid(p, name) ? 'ml' : 'g' };
   },
   /* ищем по всем вариантам записи кода (EAN-13 / UPC-A с нулём и без). Если товар есть, но без КБЖУ —
      возвращаем { partial } с названием, чтобы подставить его при фото этикетки */
@@ -556,6 +579,8 @@ async function offSearch(){
 
 /* ---- выбор порции ---- */
 function showPortion(item){
+  // напитки без указанной порции — по умолчанию стакан 250 мл, а не 100
+  if(item && item.per100 && item.unit === 'ml' && (!item.portion || item.portion === 100) && item.src !== 'local') item.portion = 250;
   fPick = item;
   $('fPortion').style.display = item ? '' : 'none';
   $('fMain').style.display = item ? 'none' : '';
@@ -564,14 +589,15 @@ function showPortion(item){
   $('fpBrand').textContent = [item.brand, item.qty, item.code ? 'штрих-код ' + item.code : '',
     item.src === 'web' ? 'найдено в интернете — сверь КБЖУ с упаковкой' : item.src === 'label' ? 'прочитано с этикетки' : item.src === 'usda' ? 'база USDA' : ''].filter(Boolean).join(' · ');
   $('fpPer').textContent = item.per100
-    ? 'На 100 г: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s)
+    ? 'На 100 ' + unitOf(item) + ': ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s)
     : 'На 1 порцию: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s);
-  $('fpUnit').textContent = item.per100 ? 'г' : 'порц.';
+  $('fpUnit').textContent = item.per100 ? unitOf(item) : 'порц.';
+  $('fpUnit').disabled = !item.per100;
   $('fpAmount').step = item.per100 ? 5 : 0.5;
   $('fpAmount').value = item.per100 ? (item.portion || 100) : 1;
   const chips = item.per100 ? [50, 100, 150, 200, 250].concat(item.portion && [50,100,150,200,250].indexOf(item.portion) < 0 ? [item.portion] : []) : [0.5, 1, 1.5, 2];
   $('fpChips').innerHTML = chips.sort(function(a, b){ return a - b; }).map(function(v){
-    return '<button type="button" class="chip" data-v="' + v + '">' + (item.per100 ? v + ' г' : v + ' порц.') + '</button>';
+    return '<button type="button" class="chip" data-v="' + v + '">' + (item.per100 ? v + ' ' + unitOf(item) : v + ' порц.') + '</button>';
   }).join('');
   updatePortion();
 }
@@ -594,7 +620,7 @@ function addPicked(){
   if(!r.a){ toast('Укажи количество'); return; }
   const base = Object.assign({}, fPick); delete base.recent;
   addFoodToDiary(dDate, fMealSel, {
-    name:fPick.name, brand:fPick.brand || '', grams:fPick.per100 ? r.a : null,
+    name:fPick.name, brand:fPick.brand || '', grams:fPick.per100 ? r.a : null, unit:fPick.per100 && fPick.unit === 'ml' ? 'ml' : 'g',
     portion:fPick.per100 ? null : (r.a === 1 ? '1 порция' : r.a + ' ' + plural(Math.ceil(r.a), 'порция', 'порции', 'порций')),
     kcal:r1(r.kcal), p:r1(r.p), f:r1(r.f), c:r1(r.c), s:r.s == null ? null : r1(r.s), src:fPick.src, base:base
   });
@@ -613,13 +639,15 @@ function addManual(){
   const k = per100 ? g / 100 : 1;
   if(per100 && !g){ toast('Укажи вес порции'); return; }
   // ввёл КБЖУ для штрих-кода — запоминаем товар, следующий скан найдёт его сразу
-  if($('fmCode').value && per100) MyBarcodes.put({ code:$('fmCode').value, name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], s:sKnown ? vals[4] : null, portion:g || 100, src:'manual' });
+  const unit = segGet('fmUnit') === 'ml' ? 'ml' : 'g';
+  if($('fmCode').value && per100) MyBarcodes.put({ code:$('fmCode').value, name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], s:sKnown ? vals[4] : null, portion:g || 100, src:'manual', unit:unit });
   addFoodToDiary(dDate, fMealSel, {
-    name:name, brand:$('fmCode').value ? 'штрих-код ' + $('fmCode').value : '', grams:g || null, portion:g ? null : '1 порция',
+    name:name, brand:$('fmCode').value ? 'штрих-код ' + $('fmCode').value : '', grams:g || null, unit:unit, portion:g ? null : '1 порция',
     kcal:r1(vals[0] * k), p:r1(vals[1] * k), f:r1(vals[2] * k), c:r1(vals[3] * k), s:sKnown ? r1(vals[4] * k) : null, src:'manual',
-    base:per100 ? { id:'m' + uid(), name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], s:sKnown ? vals[4] : null, per100:true, portion:g || 100, src:'manual' } : null
+    base:per100 ? { id:'m' + uid(), name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], s:sKnown ? vals[4] : null, per100:true, portion:g || 100, src:'manual', unit:unit } : null
   });
   ['fmName','fmKcal','fmP','fmF','fmC','fmS','fmCode'].forEach(function(id){ $(id).value = ''; });
+  segSet('fmUnit', 'g');
   $('fmGrams').value = 100;
   foodStay('manual');
 }
@@ -929,7 +957,7 @@ function barcodeNotFound(code, offline, partial){
   const onPick = function(){ const f = this.files[0]; this.value = ''; if(f) readLabel(f); };
   if($('bcLabelFile')) $('bcLabelFile').addEventListener('change', onPick);
   if($('bcLabelGal')) $('bcLabelGal').addEventListener('change', onPick);
-  $('bcNfManual').onclick = function(){ $('fmCode').value = code; $('fmName').value = bcPending.name || ''; foodTab('manual'); };
+  $('bcNfManual').onclick = function(){ $('fmCode').value = code; $('fmName').value = bcPending.name || ''; segSet('fmUnit', isLiquid(bcPending.name) ? 'ml' : 'g'); foodTab('manual'); };
   $('bcNfSearch').onclick = function(){
     foodTab('search'); $('fQ').value = bcPending.name || ''; renderLocalResults($('fQ').value);
     if(bcPending.name) offSearch(); else setTimeout(function(){ $('fQ').focus(); }, 60);
@@ -944,7 +972,7 @@ async function readLabel(file){
     const r = await VisionAI.label(file);
     if(!r || r.kcal == null){ bcStatus('Не получилось прочитать КБЖУ. Сфоткай табличку «Пищевая ценность» ближе и ровнее — или введи вручную.', 'warn'); return; }
     const p = { id:'b' + pend.code, code:pend.code, name:pend.name || r.name || 'Товар ' + pend.code, brand:pend.brand || r.brand || '', qty:pend.qty || r.qty || '',
-      kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:true, portion:r.portion || 100, src:'label', ru:/^46/.test(pend.code), cat:'' };
+      kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:true, portion:r.portion || 100, src:'label', ru:/^46/.test(pend.code), cat:'', unit:(r.unit === 'ml' || isLiquid(pend.name)) ? 'ml' : 'g' };
     MyBarcodes.put(p);
     bcStatus('Готово: ' + esc(p.name) + ' — запомнил за этим штрих-кодом.', 'ok');
     $('bcNf').style.display = 'none';
@@ -983,9 +1011,10 @@ const VisionAI = {
     'Считай только еду на тарелке/в руках. Напитки и продукты на фоне не считай, если их явно не едят сейчас.',
     'ШАГ 2. Оцени вес каждого продукта в граммах. Ориентиры: обычная тарелка 24–26 см, вилка ~19 см, ложка ~15 см. Полная тарелка гарнира — 250–350 г, половина тарелки горкой — 180–250 г, четверть — 80–130 г. Котлета домашняя 80–100 г, куриная грудка 150–200 г, яйцо 55 г, сырник 50 г, сосиска 50 г, кусок хлеба 25–30 г, столовая ложка соуса 15–20 г. Домашние порции обычно больше, чем кажется на фото, — не занижай.',
     'Штучные одинаковые продукты — ОДИН пункт с общим весом, в названии количество: «котлеты ×2».',
+    'Напитки и жидкости (вода, сок, чай, кофе, молоко, кефир, суп-бульон в кружке): unit "ml", объём в поле grams (стакан 250 мл, кружка 300 мл), КБЖУ на 100 мл. Для остальной еды unit "g".',
     'ШАГ 3. Для каждого продукта дай КБЖУ и сахар НА 100 Г готового блюда с учётом способа приготовления (жарка — с маслом; тёртые салаты с белыми вкраплениями — с майонезом). Опорные значения на 100 г (ккал/Б/Ж/У): макароны отварные 145/5/1/29; гречка отварная 110/4/1/21; рис отварной 130/2.5/0.3/28; пюре с маслом и молоком 105/2/4/15; картофель жареный 190/3/10/22; картофель отварной 85/2/0.4/17; котлета жареная свино-говяжья 250/15/18/8; котлета куриная 190/17/10/8; куриная грудка 150/30/3/0; курица с кожей запечённая 220/24/14/0; тушёное мясо, гуляш 180/16/12/3; рыба жареная 180/18/10/5; пельмени 250/11/12/25; плов 190/7/8/22; капуста тушёная 75/2/4/8; морковь тёртая с майонезом 170/1/15/7, без заправки 35/1/0/7; салат из овощей с маслом 90/1/7/5; оливье 190/5/15/8; яйцо варёное 155/13/11/1; яичница 190/13/15/1; сырники 220/15/10/18; омлет 180/10/14/2; хлеб белый 260/8/3/50; хлеб чёрный 200/6/1.5/40; сосиски 260/11/24/2; борщ 50/2/2.5/5; овсянка на молоке 110/4/3.5/16; сметана 15% 160/3/15/3; майонез 620/1/67/3; кетчуп 100/2/0/22.',
     'Проверь: ккал ≈ 4·Б + 9·Ж + 4·У, сахар не больше углеводов.',
-    'Ответь ТОЛЬКО JSON без markdown и пояснений, числа — без единиц: {"seen":"что вижу, штуки, размеры","dish":"общее название","items":[{"name":"котлеты ×2","count":2,"grams":180,"per100":{"kcal":250,"p":15,"f":18,"c":8,"s":1}}],"confidence":0.0-1.0,"note":"коротко, что могло сбить оценку"}.',
+    'Ответь ТОЛЬКО JSON без markdown и пояснений, числа — без единиц: {"seen":"что вижу, штуки, размеры","dish":"общее название","items":[{"name":"котлеты ×2","count":2,"grams":180,"unit":"g","per100":{"kcal":250,"p":15,"f":18,"c":8,"s":1}}],"confidence":0.0-1.0,"note":"коротко, что могло сбить оценку"}.',
     'Если на фото нет еды — {"seen":"","dish":"","items":[],"confidence":0,"note":"На фото не видно еды"}.'
   ].join(' '),
   downscale: function(file, max){
@@ -1067,7 +1096,7 @@ const VisionAI = {
         const g = n(x.grams != null ? x.grams : x.weight) || 0, k = g / 100;
         const hv = function(a, b){ const v = n(h[a] != null ? h[a] : h[b]); return v == null ? null : Math.max(0, v); };
         const kc = hv('kcal', 'calories'), hp = hv('p', 'protein') || 0, hf = hv('f', 'fat') || 0, hc = hv('c', 'carbs') || 0, hs = hv('s', 'sugar');
-        x = { name:x.name, count:x.count, grams:g, kcal:kc == null ? null : kc * k, p:hp * k, f:hf * k, c:hc * k, s:hs == null ? null : hs * k };
+        x = { name:x.name, count:x.count, unit:x.unit, grams:g, kcal:kc == null ? null : kc * k, p:hp * k, f:hf * k, c:hc * k, s:hs == null ? null : hs * k };
       }
       const it = { name:String(x.name || x.title || 'Блюдо').trim().slice(0, 60) || 'Блюдо',
         grams:Math.max(0, Math.min(3000, n(x.grams != null ? x.grams : x.weight) || 0)),
@@ -1085,6 +1114,7 @@ const VisionAI = {
         it.warn = true;
       }
       // штучные продукты: сколько штук и вес одной — чтобы можно было поправить «1 → 2 котлеты» одной кнопкой
+      it.unit = (x.unit === 'ml' || (x.unit !== 'g' && isLiquid(it.name))) ? 'ml' : 'g';
       let cnt = n(x.count);
       if(cnt == null){ const m = /[×x*]\s*(\d{1,2})\s*$/i.exec(it.name); if(m) cnt = +m[1]; }
       if(cnt != null && cnt >= 1 && cnt <= 30 && Math.round(cnt) === cnt && it.grams){ it.count = cnt; it.unit = it.grams / cnt; }
@@ -1096,7 +1126,8 @@ const VisionAI = {
     'На фото — упаковка продукта. Найди таблицу «Пищевая ценность» (Nutrition facts) и прочитай значения НА 100 г (или 100 мл).',
     'Если указано только на порцию — пересчитай на 100 г по весу порции. Если энергия только в кДж — переведи в ккал (÷4.184).',
     'Сахар: «в т.ч. сахара» / «sugars»; если не указан — null. Также прочитай название, бренд и вес упаковки, если видны.',
-    'Ответь ТОЛЬКО JSON без markdown: {"found":true,"name":"","brand":"","qty":"","portion":100,"per100":{"kcal":0,"p":0,"f":0,"c":0,"s":0}}.',
+    'Определи, напиток это или твёрдая еда: если на этикетке «на 100 мл», объём в мл/л или это вода, сок, молоко, кефир, энергетик — unit "ml", иначе "g".',
+    'Ответь ТОЛЬКО JSON без markdown: {"found":true,"name":"","brand":"","qty":"","unit":"g","portion":100,"per100":{"kcal":0,"p":0,"f":0,"c":0,"s":0}}.',
     'Если таблицы не видно или она нечитаема — {"found":false}. Ничего не выдумывай.'
   ].join(' '),
   label: async function(file){
@@ -1120,7 +1151,8 @@ const VisionAI = {
     let sg = n(h.s != null ? h.s : h.sugar); if(sg != null && sg > ca) sg = ca;
     return { name:String(o.name || '').trim().slice(0, 80), brand:String(o.brand || '').trim().slice(0, 60), qty:String(o.qty || '').slice(0, 30),
       portion:Math.min(1000, Math.max(0, Math.round(n(o.portion) || 0))) || 100,
-      kcal:r1(kcal), p:r1(Math.max(0, pr)), f:r1(Math.max(0, fa)), c:r1(Math.max(0, ca)), s:sg == null ? null : r1(Math.max(0, sg)) };
+      kcal:r1(kcal), p:r1(Math.max(0, pr)), f:r1(Math.max(0, fa)), c:r1(Math.max(0, ca)), s:sg == null ? null : r1(Math.max(0, sg)),
+      unit:(o.unit === 'ml' || /мл|ml|\d\s*л\b/i.test(String(o.qty || '')) || isLiquid(o.name)) ? 'ml' : 'g' };
   },
   analyze: async function(file){
     const c = this.cfg();
@@ -1192,7 +1224,7 @@ function renderAiItems(out){
     aiItems.map(function(x, i){
       return '<div class="ai-row"><input class="ai-n" data-i="' + i + '" value="' + esc(x.name) + '" aria-label="Название" />' +
         '<span class="ai-gw"><button type="button" class="ai-gs" data-i="' + i + '" data-d="-1" aria-label="Меньше">−</button>' +
-        '<label class="ai-g"><input type="number" min="0" step="5" inputmode="numeric" data-i="' + i + '" value="' + Math.round(x.grams) + '" aria-label="Вес, г" /> г</label>' +
+        '<label class="ai-g"><input type="number" min="0" step="5" inputmode="numeric" data-i="' + i + '" value="' + Math.round(x.grams) + '" aria-label="Количество" /> <button type="button" class="ai-u" data-i="' + i + '" aria-label="Граммы или миллилитры">' + unitOf(x) + '</button></label>' +
         '<button type="button" class="ai-gs" data-i="' + i + '" data-d="1" aria-label="Больше">+</button></span>' +
         (x.count ? '<span class="ai-cnt"><button type="button" data-i="' + i + '" data-d="-1" aria-label="На одну штуку меньше">−</button><b>' + x.count + ' шт</b><button type="button" data-i="' + i + '" data-d="1" aria-label="На одну штуку больше">+</button></span>' : '') +
         '<span class="ai-k">' + Math.round(x.kcal) + ' ккал<br><small>Б ' + r1(x.p) + ' Ж ' + r1(x.f) + ' У ' + r1(x.c) + ' Сахар ' + sv(x.s) + '</small></span></div>';
@@ -1226,6 +1258,53 @@ const WO_EXTRA = [
   ['Велотренажёр', 'Кардио', 'велосипед'], ['Эллипс', 'Кардио', 'эллиптический'], ['Гребной тренажёр', 'Кардио', 'гребля'],
   ['Скакалка', 'Кардио', ''], ['Степпер', 'Кардио', 'лестница']
 ];
+/* ---- расход калорий на тренировке ----
+   Метод — METы из «Компендиума физической активности» (Ainsworth и др.), по времени под нагрузкой:
+   • силовые: время подхода = повторы × 3.5 с; MET рабочей фазы зависит от типа упражнения
+     (базовые на ноги 6, базовые на верх 5, изолирующие 3.5, пресс 3.8) и растёт с весом снаряда
+     относительно веса тела (до +37%); для упражнений с собственным весом берётся доля веса тела;
+   • отдых между подходами ≈ 90 с (+60 с на подготовку) — пульс ещё высокий, MET ≈ 2.2;
+   • кардио (бег, эллипс…) — вписываются минуты; статика (планка) — секунды.
+   Считаем «активные» ккал (сверх покоя): (MET − 1) × вес тела × часы. Точность ±15–20% — точнее только пульсометр. */
+const WO_KINDS = [
+  { re:/вакуум/, t:'time', met:2.0 },
+  { re:/планк/, t:'time', met:3.8 },
+  { re:/(^|\s)бег($|\s)/, t:'cardio', met:9.8 }, { re:/ходьб/, t:'cardio', met:3.8 }, { re:/велотрен/, t:'cardio', met:6.8 },
+  { re:/эллипс/, t:'cardio', met:5.0 }, { re:/гребн/, t:'cardio', met:7.0 }, { re:/скакалк/, t:'cardio', met:11.8 }, { re:/степпер/, t:'cardio', met:8.8 },
+  { re:/б[её]рпи/, t:'reps', met:8.0, bw:0, tempo:3 },
+  { re:/подтяг/, t:'reps', met:5.0, bw:1.0 }, { re:/гравитрон/, t:'reps', met:4.5, bw:0.5 },
+  { re:/брусь/, t:'reps', met:5.0, bw:0.9 }, { re:/отжиман.*скам/, t:'reps', met:4.0, bw:0.5 }, { re:/отжиман/, t:'reps', met:4.5, bw:0.65 },
+  { re:/скручив|подъ[её]м ног|велосипед|ролик|русские/, t:'reps', met:3.8, bw:0 },
+  { re:/присед|станов|румынск|жим ногами|выпад|гакк|сумо|тяга штанги$|классическая тяга|ягодичный мост/, t:'reps', met:6.0, bw:0.7 },
+  { re:/жим|тяга|пуловер|гиперэкст/, t:'reps', met:5.0, bw:0 },
+  { re:/./, t:'reps', met:3.5, bw:0 }
+];
+function woKind(name){ const n = normTxt(name); return WO_KINDS.find(function(k){ return k.re.test(n); }); }
+function bodyW(){
+  try { const w = (ME.profile.weights || []).slice().sort(function(a, b){ return a.date < b.date ? -1 : 1; }); if(w.length) return +w[w.length - 1].kg; } catch(e){}
+  return (ME && ME.profile && +ME.profile.weight) || 75;
+}
+function woBurn(name, sets){
+  const k = woKind(name), W = bodyW();
+  if(!sets || !sets.length) return 0;
+  let kcal = 0;
+  if(k.t === 'cardio'){
+    const min = sets.reduce(function(s, x){ return s + (+x.reps || 0); }, 0);
+    kcal = (k.met - 1) * W * min / 60;
+  } else {
+    sets.forEach(function(x){
+      const reps = +x.reps || 0;
+      const sec = k.t === 'time' ? reps : reps * (k.tempo || 3.5);
+      const load = (+x.kg || 0) + (k.bw || 0) * W;                  // снаряд + часть собственного веса
+      const met = k.t === 'time' ? k.met : k.met * (1 + 0.25 * Math.min(1.5, load / W));
+      kcal += (met - 1) * W * sec / 3600;
+    });
+    const restSec = (sets.length - 1) * 90 + 60;                    // отдых между подходами + подготовка
+    kcal += 1.2 * W * restSec / 3600;                               // пульс в отдыхе ещё высокий: MET ≈ 2.2
+  }
+  return Math.round(kcal);
+}
+
 let woCat = null;
 function woCatalog(){
   if(woCat) return woCat;
@@ -1292,6 +1371,23 @@ function woPick(name){
   $('woRecentWrap').style.display = 'none';
   woState(); woLastHint();
 }
+/* подписи колонок под тип упражнения: кардио — минуты, планка — секунды, без веса */
+function woApplyKind(){
+  const k = woPicked ? woKind(woPicked) : null;
+  const noKg = k && (k.t === 'cardio' || k.t === 'time');
+  $('woHR').textContent = k && k.t === 'cardio' ? 'Минуты' : k && k.t === 'time' ? 'Секунды' : 'Повторы';
+  $('woHK').textContent = noKg ? '' : 'Вес, кг';
+  $('woSets').classList.toggle('nokg', !!noKg);
+  $('woHead').classList.toggle('nokg', !!noKg);
+}
+function woLiveBurn(){
+  if(!woPicked){ $('woBurn').textContent = ''; return; }
+  const sets = Array.prototype.map.call($('woSets').children, function(r){ return { reps:+r.querySelector('.set-r').value || 0, kg:+String(r.querySelector('.set-k').value).replace(',', '.') || 0 }; })
+    .filter(function(x){ return x.reps > 0; });
+  const kc = woBurn(woPicked, sets);
+  const k = woKind(woPicked);
+  $('woBurn').innerHTML = kc ? '🔥 ≈ <b>' + kc + ' ккал</b> сожжёшь за это упражнение <span>(при весе тела ' + r1(bodyW()) + ' кг' + (k.t === 'cardio' ? ', средний темп' : '') + ')</span>' : '';
+}
 function woState(){
   const v = $('woName').value.trim();
   const valid = !!woPicked && normTxt(v) === normTxt(woPicked);
@@ -1303,6 +1399,7 @@ function woState(){
   $('woClear').style.display = v ? '' : 'none';
   $('woSave').disabled = !valid;
   $('woSets').classList.toggle('locked', !valid);
+  woApplyKind(); woLiveBurn();
 }
 function woRenderSug(){
   const v = $('woName').value;
@@ -1384,7 +1481,8 @@ function saveWorkout(row){
       setTimeout(function(){ const f = nr.querySelector('.set-r'); f.focus(); f.select && f.select(); }, 30);
     }
   } else {
-    toast((isNew ? 'Записал: ' : 'Сохранил: ') + woPicked + ' · ' + sets.length + ' ' + plural(sets.length, 'подход', 'подхода', 'подходов'));
+    const kd = woKind(woPicked), tot = sets.reduce(function(a, x){ return a + x.reps; }, 0);
+    toast((isNew ? 'Записал: ' : 'Сохранил: ') + woPicked + ' · ' + (kd.t === 'cardio' ? tot + ' мин' : sets.length + ' ' + plural(sets.length, 'подход', 'подхода', 'подходов')) + ' · ≈' + woBurn(woPicked, sets) + ' ккал');
   }
   $('woTitle').textContent = 'Изменить упражнение';
   $('woNext').style.display = '';
@@ -1510,8 +1608,18 @@ function diaryInit(){
   $('dWoAdd').onclick = function(){ openWorkoutModal(); };
   $('dWoProg').onclick = function(){ openProgress('str'); };
   $('dBwProg').onclick = function(){ openProgress('body'); };
-  $('dBwSave').onclick = saveBodyWeight;
-  $('dBwInput').addEventListener('keydown', function(e){ if(e.key === 'Enter') saveBodyWeight(); });
+  // единицы: ручной ввод — г/мл (напиток по названию выбирается сам), экран порции — тап по «г/мл»
+  let fmUnitTouched = false;
+  segInit('fmUnit', function(){ fmUnitTouched = true; });
+  $('fmName').addEventListener('input', function(){ if(!fmUnitTouched) segSet('fmUnit', isLiquid(this.value) ? 'ml' : 'g'); });
+  $('fpUnit').onclick = function(){
+    if(!fPick || !fPick.per100) return;
+    fPick.unit = fPick.unit === 'ml' ? 'g' : 'ml';
+    const u = unitOf(fPick);
+    this.textContent = u;
+    $('fpPer').textContent = $('fpPer').textContent.replace(/^На 100 (г|мл)/, 'На 100 ' + u);
+    $('fpChips').querySelectorAll('.chip').forEach(function(c){ c.textContent = c.dataset.v + ' ' + u; });
+  };
   // модалка еды
   segInit('fMealSeg', function(v){ fMealSel = v; renderFAdded(); updatePortion(); const b = $('aiAdd'); if(b) b.textContent = 'Добавить в «' + MEALS.find(function(m){ return m.id === v; }).label + '»'; });
   segInit('fTabs', foodTab);
@@ -1532,6 +1640,8 @@ function diaryInit(){
     const r = e.target.closest('.fres');
     if(r){ const k = r.dataset.key; showPortion(k[0] === 'l' ? fLocalList[+k.slice(1)] : fOffList[+k.slice(1)]); return; }
     const c = e.target.closest('#fpChips .chip'); if(c){ $('fpAmount').value = c.dataset.v; updatePortion(); return; }
+    const au = e.target.closest('.ai-u');
+    if(au){ const x = aiItems[+au.dataset.i]; if(x){ x.unit = x.unit === 'ml' ? 'g' : 'ml'; au.textContent = unitOf(x); } return; }
     const gs = e.target.closest('.ai-gs');
     if(gs){
       // «на глаз больше/меньше»: шаг 10 г для маленьких порций, 25 г для больших
@@ -1557,9 +1667,9 @@ function diaryInit(){
       if(!add.length){ toast('Нечего добавлять — укажи вес'); return; }
       add.forEach(function(x){
         const name = String(x.name || '').trim() || 'Блюдо';
-        const item = { name:name, brand:'распознано по фото', grams:x.grams || null, portion:x.grams ? null : '1 порция', kcal:Math.round(x.kcal), p:r1(x.p), f:r1(x.f), c:r1(x.c), s:x.s == null ? null : r1(x.s), src:'ai' };
+        const item = { name:name, brand:'распознано по фото', grams:x.grams || null, unit:x.unit === 'ml' ? 'ml' : 'g', portion:x.grams ? null : '1 порция', kcal:Math.round(x.kcal), p:r1(x.p), f:r1(x.f), c:r1(x.c), s:x.s == null ? null : r1(x.s), src:'ai' };
         // база на 100 г — чтобы блюдо появилось в «Недавних» и его можно было добавить снова в пару нажатий
-        if(x.grams) item.base = { id:'ai-' + name.toLowerCase(), name:name, kcal:Math.round(x.kcal / x.grams * 100), p:r1(x.p / x.grams * 100), f:r1(x.f / x.grams * 100), c:r1(x.c / x.grams * 100), s:x.s == null ? null : r1(x.s / x.grams * 100), per100:true, src:'ai' };
+        if(x.grams) item.base = { id:'ai-' + name.toLowerCase(), name:name, kcal:Math.round(x.kcal / x.grams * 100), p:r1(x.p / x.grams * 100), f:r1(x.f / x.grams * 100), c:r1(x.c / x.grams * 100), s:x.s == null ? null : r1(x.s / x.grams * 100), per100:true, src:'ai', unit:item.unit };
         addFoodToDiary(dDate, fMealSel, item);
       });
       aiPreview(null); $('aiResult').innerHTML = '';
@@ -1624,7 +1734,7 @@ function diaryInit(){
     b.closest('.setrow').remove(); renumberSets(); woDirty = true;
     if(woEditId) saveWorkout();                                    // удалили подход у записанного упражнения — сразу сохраняем
   });
-  $('woSets').addEventListener('input', function(e){ const r = e.target.closest('.setrow'); if(r) r.classList.remove('done'); woDirty = true; });
+  $('woSets').addEventListener('input', function(e){ const r = e.target.closest('.setrow'); if(r) r.classList.remove('done'); woDirty = true; woLiveBurn(); });
   // Enter в поле веса = ✓ (удобно на телефоне: «Готово» на клавиатуре)
   $('woSets').addEventListener('keydown', function(e){
     if(e.key !== 'Enter') return;
