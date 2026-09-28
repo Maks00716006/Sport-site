@@ -90,7 +90,7 @@ function addFoodToDiary(date, meal, item){
   d.meals[meal].push(item);
   save();
   renderDiary({ flash: item.id });
-  toast('Добавил в «' + MEALS.find(function(m){ return m.id === meal; }).label + '»');
+  toast('Добавил: ' + item.name + ' → ' + MEALS.find(function(m){ return m.id === meal; }).label);
   achCheck();
 }
 function delFood(meal, id){
@@ -282,10 +282,38 @@ function openFoodModal(meal){
   renderLocalResults('');
   $('fOffRes').innerHTML = '';
   $('fOffStatus').textContent = '';
+  renderFAdded();
   $('foodModal').classList.add('on');
   setTimeout(function(){ if(window.innerWidth > 700) $('fQ').focus(); }, 80);
 }
 function closeFoodModal(){ Scanner.stop(); $('foodModal').classList.remove('on'); }
+/* после добавления окно НЕ закрывается: возвращаемся к поиску (или остаёмся на фото/ручном вводе),
+   сверху — что уже лежит в этом приёме пищи и кнопка «Готово» */
+function foodStay(tab){
+  showPortion(null);
+  if(tab === 'photo' || tab === 'manual'){ foodTab(tab); }
+  else {
+    const cur = segGet('fTabs');
+    if(cur === 'barcode'){ foodTab('barcode'); bcStatus('Добавлено ✓ Сканируй следующий товар или нажми «Готово».', 'ok'); $('bcCode').value = ''; if($('bcNf')) $('bcNf').style.display = 'none'; }
+    else { foodTab('search'); $('fQ').value = ''; $('fNotFound').style.display = 'none'; renderLocalResults(''); $('fOffRes').innerHTML = ''; $('fOffStatus').textContent = ''; }
+  }
+  renderFAdded(true);
+  const box = $('foodModal').querySelector('.sheet'); if(box) box.scrollTo({ top:0, behavior:'smooth' });
+}
+function renderFAdded(flash){
+  const d = dayData(dDate), list = d ? d.meals[fMealSel] || [] : [];
+  const el = $('fAdded');
+  if(!list.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const kcal = list.reduce(function(s, x){ return s + (+x.kcal || 0); }, 0);
+  const label = MEALS.find(function(m){ return m.id === fMealSel; }).label;
+  el.innerHTML = '<div class="fadded-h"><span>В «' + label + '» · <b>' + Math.round(kcal) + ' ккал</b></span>' +
+      '<button type="button" class="btn sm" id="fDone">Готово</button></div>' +
+    '<div class="fadded-l">' + list.map(function(x, i){
+      return '<span class="fchip' + (flash && i === list.length - 1 ? ' new' : '') + '">' + esc(x.name) + ' <i>' + Math.round(x.kcal) + '</i>' +
+        '<button type="button" data-del="' + x.id + '" aria-label="Убрать ' + esc(x.name) + '">&times;</button></span>';
+    }).join('') + '</div>';
+  el.style.display = '';
+}
 function foodTab(t){
   segSet('fTabs', t);
   ['search','barcode','photo','manual'].forEach(function(x){ $('fPane-' + x).style.display = x === t ? '' : 'none'; });
@@ -570,7 +598,7 @@ function addPicked(){
     portion:fPick.per100 ? null : (r.a === 1 ? '1 порция' : r.a + ' ' + plural(Math.ceil(r.a), 'порция', 'порции', 'порций')),
     kcal:r1(r.kcal), p:r1(r.p), f:r1(r.f), c:r1(r.c), s:r.s == null ? null : r1(r.s), src:fPick.src, base:base
   });
-  closeFoodModal();
+  foodStay();
 }
 
 /* ---- свой продукт ---- */
@@ -591,7 +619,9 @@ function addManual(){
     kcal:r1(vals[0] * k), p:r1(vals[1] * k), f:r1(vals[2] * k), c:r1(vals[3] * k), s:sKnown ? r1(vals[4] * k) : null, src:'manual',
     base:per100 ? { id:'m' + uid(), name:name, kcal:vals[0], p:vals[1], f:vals[2], c:vals[3], s:sKnown ? vals[4] : null, per100:true, portion:g || 100, src:'manual' } : null
   });
-  closeFoodModal();
+  ['fmName','fmKcal','fmP','fmF','fmC','fmS','fmCode'].forEach(function(id){ $(id).value = ''; });
+  $('fmGrams').value = 100;
+  foodStay('manual');
 }
 
 /* ================= СКАНЕР ШТРИХ-КОДОВ (v2) =================
@@ -1483,12 +1513,22 @@ function diaryInit(){
   $('dBwSave').onclick = saveBodyWeight;
   $('dBwInput').addEventListener('keydown', function(e){ if(e.key === 'Enter') saveBodyWeight(); });
   // модалка еды
-  segInit('fMealSeg', function(v){ fMealSel = v; updatePortion(); const b = $('aiAdd'); if(b) b.textContent = 'Добавить в «' + MEALS.find(function(m){ return m.id === v; }).label + '»'; });
+  segInit('fMealSeg', function(v){ fMealSel = v; renderFAdded(); updatePortion(); const b = $('aiAdd'); if(b) b.textContent = 'Добавить в «' + MEALS.find(function(m){ return m.id === v; }).label + '»'; });
   segInit('fTabs', foodTab);
   $('fQ').addEventListener('input', function(){ if(this.value) $('fNotFound').style.display = 'none'; renderLocalResults(this.value); $('fOffRes').innerHTML = ''; $('fOffStatus').textContent = ''; });
   $('fQ').addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); if(fLocalList.length && !e.shiftKey && this.value.trim()) showPortion(fLocalList[0]); else offSearch(); } });
   $('fOffBtn').onclick = offSearch;
   $('foodModal').addEventListener('click', function(e){
+    if(e.target.closest('#fDone')){ closeFoodModal(); return; }
+    const dl = e.target.closest('#fAdded [data-del]');
+    if(dl){
+      const d = dayData(dDate); if(!d) return;
+      const it = d.meals[fMealSel].find(function(x){ return x.id === dl.dataset.del; });
+      d.meals[fMealSel] = d.meals[fMealSel].filter(function(x){ return x.id !== dl.dataset.del; });
+      save(); renderDiary(); renderFAdded(); achCheck(true);
+      if(it) toast('Убрал: ' + it.name);
+      return;
+    }
     const r = e.target.closest('.fres');
     if(r){ const k = r.dataset.key; showPortion(k[0] === 'l' ? fLocalList[+k.slice(1)] : fOffList[+k.slice(1)]); return; }
     const c = e.target.closest('#fpChips .chip'); if(c){ $('fpAmount').value = c.dataset.v; updatePortion(); return; }
@@ -1522,7 +1562,8 @@ function diaryInit(){
         if(x.grams) item.base = { id:'ai-' + name.toLowerCase(), name:name, kcal:Math.round(x.kcal / x.grams * 100), p:r1(x.p / x.grams * 100), f:r1(x.f / x.grams * 100), c:r1(x.c / x.grams * 100), s:x.s == null ? null : r1(x.s / x.grams * 100), per100:true, src:'ai' };
         addFoodToDiary(dDate, fMealSel, item);
       });
-      closeFoodModal();
+      aiPreview(null); $('aiResult').innerHTML = '';
+      foodStay('photo');
     }
   });
   $('fpAmount').addEventListener('input', updatePortion);

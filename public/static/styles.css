@@ -1445,3 +1445,17 @@
   @media (max-width:560px){ .ai-gs{width:44px;} }
   @media (max-width:360px){ .sethead,.setrow{grid-template-columns:48px minmax(0,1fr) minmax(0,1fr) 44px 26px;gap:5px;} .set-ok{width:44px;} }
   @media (max-width:360px){ .sethead{font-size:9.5px;letter-spacing:0;} .set-n small{font-size:8.5px;letter-spacing:0;} }
+
+  /* окно «Добавить еду»: что уже в этом приёме пищи + «Готово» (окно после добавления не закрывается) */
+  .fadded{margin:10px 0 12px;padding:10px 12px;border-radius:14px;background:#0F1113;border:1px solid rgba(201,244,92,.3);display:grid;gap:8px;animation:fade .2s ease;}
+  .fadded-h{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13.5px;color:var(--muted);}
+  .fadded-h b{color:var(--lime);}
+  .fadded-h .btn{min-height:40px;padding:0 18px;flex:none;}
+  .fadded-l{display:flex;flex-wrap:wrap;gap:6px;max-height:112px;overflow-y:auto;}
+  .fchip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 4px 4px 10px;border-radius:9px;background:#1A1E23;border:1px solid var(--line);font-size:12.5px;font-weight:600;}
+  .fchip i{font-style:normal;color:var(--muted);font-weight:500;}
+  .fchip button{width:28px;height:28px;border-radius:7px;color:var(--muted);font-size:17px;display:grid;place-items:center;flex:none;}
+  .fchip button:hover{color:var(--red);background:rgba(255,110,96,.1);}
+  .fchip.new{border-color:rgba(201,244,92,.55);animation:ditemin .3s ease;}
+  @media (max-width:560px){ .fadded-h .btn{min-height:44px;} .fchip button{width:34px;height:34px;} }
+  @media (max-width:560px){ .fchip{padding-right:0;} .fchip button{width:44px;height:44px;margin:-7px 0 -7px -6px;} }
