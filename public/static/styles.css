@@ -1390,3 +1390,58 @@
   .bcnf-alt{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .bcnf-alt .btn{min-height:44px;}
   .bcnf .busy{opacity:.55;pointer-events:none;}
+
+  /* ================= Дневник: шапка без лишнего ================= */
+  .dhead{margin-bottom:14px;}
+  .ddate{font:inherit;font-weight:700;font-size:15px;color:var(--text);background:none;border:0;padding:6px 10px;border-radius:10px;cursor:default;min-height:36px;}
+  .ddate.back{cursor:pointer;}
+  .ddate.back:hover{background:#1B1F24;}
+  .ddate small{font-size:12px;color:var(--lime);font-weight:650;margin-left:4px;}
+
+  /* ================= Упражнение: выбор из базы с живым поиском ================= */
+  .wopick{position:relative;}
+  .wo-inp{position:relative;}
+  .wo-inp input{padding-right:44px;}
+  .wo-inp input.ok{border-color:rgba(201,244,92,.55);}
+  .wo-inp input.bad{border-color:rgba(255,110,96,.7);}
+  .wo-clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:10px;color:var(--muted);font-size:22px;display:grid;place-items:center;}
+  .wo-clear:hover{color:var(--text);}
+  .wo-sug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;background:#15181C;border:1px solid var(--line2);border-radius:14px;
+    box-shadow:0 18px 40px rgba(0,0,0,.5);padding:6px;max-height:300px;overflow-y:auto;overscroll-behavior:contain;animation:fade .15s ease;}
+  .wo-opt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;padding:10px 12px;border-radius:10px;min-height:48px;justify-content:center;}
+  .wo-opt b{font-size:14.5px;font-weight:650;}
+  .wo-opt b mark{background:none;color:var(--lime);}
+  .wo-opt small{font-size:12px;color:var(--muted);}
+  .wo-opt.on,.wo-opt:hover{background:#1E2329;}
+  .wo-err{margin-top:6px;font-size:13px;color:var(--red);font-weight:600;}
+  .sets.locked{opacity:.45;pointer-events:none;}
+  .wo-next{justify-self:center;font-size:14px;min-height:44px;}
+  #woSave:disabled{opacity:.45;cursor:not-allowed;}
+
+  /* подходы: номер · повторы · вес · ✓ · × */
+  .sethead,.setrow{display:grid;grid-template-columns:62px minmax(0,1fr) minmax(0,1fr) 44px 32px;gap:8px;align-items:center;}
+  .sethead span:nth-child(2),.sethead span:nth-child(3){text-align:center;}
+  .setrow{padding:6px;}
+  .setrow label{display:block;min-width:0;}
+  .setrow input{text-align:center;}
+  .set-n{width:auto;height:auto;display:flex;flex-direction:column;align-items:center;line-height:1.1;padding:4px 0;border-radius:9px;background:var(--limesoft);color:var(--lime);}
+  .set-n small{font-size:9.5px;font-weight:650;letter-spacing:.03em;text-transform:uppercase;color:rgba(201,244,92,.8);}
+  .set-n b{font-size:16px;font-weight:800;}
+  .set-ok{width:44px;height:40px;border-radius:10px;border:1px solid var(--line2);display:grid;place-items:center;color:var(--muted);background:var(--panel2);}
+  .set-ok svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}
+  .setrow.done{border-color:rgba(95,208,140,.45);}
+  .setrow.done .set-ok{background:var(--green);border-color:var(--green);color:#0B0C0E;}
+  .setrow.done .set-n{background:rgba(95,208,140,.15);color:var(--green);}
+  .setrow.done .set-n small{color:rgba(95,208,140,.85);}
+  @media (max-width:360px){
+    .sethead,.setrow{grid-template-columns:52px minmax(0,1fr) minmax(0,1fr) 40px 28px;gap:6px;}
+    .set-ok{width:40px;}
+  }
+  .wsets span{display:inline-flex;align-items:center;gap:5px;}
+  .wsets span i{font-style:normal;font-size:10px;font-weight:800;width:15px;height:15px;border-radius:5px;display:grid;place-items:center;background:rgba(201,244,92,.2);}
+  .ddate{min-height:44px;}
+  .set-ok{height:44px;min-width:44px;}
+  .setrow input{height:44px;}
+  @media (max-width:560px){ .ai-gs{width:44px;} }
+  @media (max-width:360px){ .sethead,.setrow{grid-template-columns:48px minmax(0,1fr) minmax(0,1fr) 44px 26px;gap:5px;} .set-ok{width:44px;} }
+  @media (max-width:360px){ .sethead{font-size:9.5px;letter-spacing:0;} .set-n small{font-size:8.5px;letter-spacing:0;} }

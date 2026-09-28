@@ -113,7 +113,8 @@ function renderDiary(opt){
   renderMeals(opt.flash);
   renderWorkout(opt.flash);
   renderWater();
-  $('dDateLabel').textContent = humanDate(dDate);
+  $('dDateLabel').innerHTML = esc(humanDate(dDate)) + (dDate !== today() ? ' <small>→ к сегодня</small>' : '');
+  $('dDateLabel').classList.toggle('back', dDate !== today());
 }
 
 function renderWeekStrip(){
@@ -215,7 +216,7 @@ function renderWorkout(flash){
     : 'Запиши упражнения, подходы и рабочие веса';
   $('dWoList').innerHTML = list.length ? list.map(function(w){
     return '<div class="ditem wo' + (w.id === flash ? ' flash' : '') + '" data-food="' + w.id + '">' +
-      '<div class="ditem-t"><b>' + esc(w.name) + '</b><div class="wsets">' + setsSummary(w.sets) + '</div></div>' +
+      '<div class="ditem-t"><b>' + esc(w.name) + '</b><div class="wsets">' + w.sets.map(function(st, i){ return '<span><i>' + (i + 1) + '</i>' + st.reps + (st.kg ? ' × ' + r1(st.kg) + ' кг' : ' повт.') + '</span>'; }).join('') + '</div></div>' +
       '<button type="button" class="ditem-e" aria-label="Изменить" onclick="openWorkoutModal(\'' + w.id + '\')">' + D_ICON.edit + '</button>' +
       '<button type="button" class="ditem-x" aria-label="Удалить" onclick="delWorkout(\'' + w.id + '\')">' + D_ICON.x + '</button></div>';
   }).join('') : '';
@@ -1171,44 +1172,146 @@ function renderAiItems(out){
     '<button class="btn wide" type="button" id="aiAdd">Добавить в «' + MEALS.find(function(m){ return m.id === fMealSel; }).label + '»</button>';
 }
 
-/* ================= ТРЕНИРОВКА: модалка ================= */
-let woEditId = null;
+/* ================= ТРЕНИРОВКА: модалка =================
+   • Упражнение выбирается только из базы (живой поиск по мере ввода) — никаких «Влад» в дневнике.
+   • Одно упражнение = одна карточка с массивом подходов { reps, kg }.
+   • «Сохранить» и ✓ у подхода записывают упражнение, но окно не закрывается: можно сразу вписать
+     следующий подход или перейти к следующему упражнению. */
+const WO_EXTRA = [
+  ['Жим гантелей лёжа', 'Грудь', 'жим гантелей'], ['Жим гантелей на наклонной скамье', 'Верх груди', 'наклонная гантели'],
+  ['Жим в тренажёре Смита', 'Грудь', 'смит'], ['Жим от груди в тренажёре', 'Грудь', 'хаммер'],
+  ['Подтягивания обратным хватом', 'Спина, бицепс', 'подтягивания'], ['Подтягивания в гравитроне', 'Спина', 'гравитрон'],
+  ['Тяга гантели в наклоне', 'Спина', 'тяга одной рукой'], ['Тяга горизонтального блока', 'Спина', 'тяга к поясу блок'],
+  ['Пуловер с гантелью', 'Грудь, спина', 'пуловер'], ['Становая тяга сумо', 'Ноги, спина', 'сумо становая'],
+  ['Фронтальные приседания', 'Квадрицепс', 'присед фронтальный'], ['Приседания в Смите', 'Ноги', 'присед смит'],
+  ['Гакк-приседания', 'Квадрицепс', 'гакк присед'], ['Приседания с гантелью (гоблет)', 'Ноги', 'гоблет присед'],
+  ['Приседания без веса', 'Ноги', 'присед воздушные'], ['Сведение ног в тренажёре', 'Приводящие', 'сведение ног'],
+  ['Разведение ног в тренажёре', 'Ягодицы', 'разведение ног отведение'], ['Армейский жим штанги стоя', 'Плечи', 'жим стоя армейский'],
+  ['Жим гантелей сидя', 'Плечи', 'жим сидя плечи'], ['Жим Арнольда', 'Плечи', 'арнольд'],
+  ['Подъём гантелей на бицепс', 'Бицепс', 'бицепс гантели'], ['Подъём на бицепс на нижнем блоке', 'Бицепс', 'бицепс блок'],
+  ['Разгибание руки с гантелью из-за головы', 'Трицепс', 'французский гантель'], ['Отжимания от скамьи', 'Трицепс', 'обратные отжимания'],
+  ['Скручивания на верхнем блоке', 'Пресс', 'молитва скручивания блок'], ['Боковая планка', 'Косые мышцы', 'планка боковая'],
+  ['Русские скручивания', 'Косые мышцы', 'твист'], ['Вакуум', 'Пресс', ''],
+  ['Бёрпи', 'Всё тело', 'берпи burpee'], ['Бег', 'Кардио', 'пробежка беговая дорожка'], ['Ходьба', 'Кардио', 'дорожка шаги'],
+  ['Велотренажёр', 'Кардио', 'велосипед'], ['Эллипс', 'Кардио', 'эллиптический'], ['Гребной тренажёр', 'Кардио', 'гребля'],
+  ['Скакалка', 'Кардио', ''], ['Степпер', 'Кардио', 'лестница']
+];
+let woCat = null;
+function woCatalog(){
+  if(woCat) return woCat;
+  const words = function(t){ return normTxt(t).split(' ').filter(Boolean); };
+  woCat = EXERCISES.map(function(e){ return { name:e.name, hint:e.main || e.muscle || '', keys:words(e.name + ' ' + (e.alt || '')), base:1 }; })
+    .concat(WO_EXTRA.map(function(x){ return { name:x[0], hint:x[1], keys:words(x[0] + ' ' + x[2]), base:0 }; }));
+  // популярные сокращения
+  const alias = { 'Жим штанги лёжа':'жим лежа', 'Приседания со штангой':'приседания присед', 'Классическая тяга штанги':'становая тяга', 'Подтягивания широким хватом':'турник подтягивания' };
+  woCat.forEach(function(e){ if(alias[e.name]){ e.keys = e.keys.concat(words(alias[e.name])); e.alias = [normTxt(alias[e.name])]; } });
+  return woCat;
+}
+function woFind(q){
+  const qw = normTxt(q).split(' ').filter(Boolean);
+  if(!qw.length) return [];
+  const nq = normTxt(q);
+  return woCatalog().map(function(e){
+    const ok = qw.every(function(w){ return e.keys.some(function(k){ return k.indexOf(w) === 0; }); });
+    if(!ok) return null;
+    const n = normTxt(e.name), nw = n.split(' ');
+    const aliasHit = (e.alias || []).some(function(a){ return a.indexOf(nq) === 0; });
+    // точное → начинается с запроса/синонима → первое слово совпадает → запрос внутри → остальное
+    const score = n === nq ? 0 : (n.indexOf(nq) === 0 || aliasHit) ? 1 : nw[0].indexOf(qw[0]) === 0 ? 2 : n.indexOf(nq) >= 0 ? 3 : 4;
+    return { e:e, score:score };
+  }).filter(Boolean).sort(function(a, b){ return a.score - b.score || b.e.base - a.e.base || a.e.name.length - b.e.name.length; })   // сначала упражнения из раздела «Зал»
+    .slice(0, 8).map(function(x){ return x.e; });
+}
+function woExact(v){ const n = normTxt(v); return woCatalog().find(function(e){ return normTxt(e.name) === n; }) || null; }
+
+let woEditId = null, woPicked = null, woLegacy = null, woDirty = false, woSugList = [], woSugI = -1;
 function openWorkoutModal(id){
-  woEditId = id || null;
+  woEditId = id || null; woDirty = false;
   const d = dayData(dDate);
   const w = id && d ? d.workout.find(function(x){ return x.id === id; }) : null;
+  woLegacy = w && !woExact(w.name) ? w.name : null;          // старая запись со своим названием — редактировать можно
   $('woTitle').textContent = w ? 'Изменить упражнение' : 'Добавить упражнение';
   $('woName').value = w ? w.name : '';
+  woPicked = w ? w.name : null;
   $('woSets').innerHTML = '';
-  (w ? w.sets : [{ reps:10, kg:'' }]).forEach(function(s){ addSetRow(s.reps, s.kg); });
-  // быстрый выбор: последние упражнения пользователя
+  (w ? w.sets : [{ reps:10, kg:'' }]).forEach(function(s){ addSetRow(s.reps, s.kg, !!w); });
+  // недавние — только упражнения из базы
   const recent = [];
-  Object.keys(diaryStore()).sort().reverse().forEach(function(ds){ (diaryStore()[ds].workout || []).forEach(function(x){ if(recent.indexOf(x.name) < 0 && recent.length < 8) recent.push(x.name); }); });
+  Object.keys(diaryStore()).sort().reverse().forEach(function(ds){ (diaryStore()[ds].workout || []).forEach(function(x){ const e = woExact(x.name); if(e && recent.indexOf(e.name) < 0 && recent.length < 8) recent.push(e.name); }); });
   $('woRecent').innerHTML = recent.map(function(n){ return '<button type="button" class="chip" data-n="' + esc(n) + '">' + esc(n) + '</button>'; }).join('');
-  $('woRecentWrap').style.display = recent.length ? '' : 'none';
-  woLastHint();
+  $('woRecentWrap').style.display = recent.length && !w ? '' : 'none';
+  $('woNext').style.display = 'none';
+  woHideSug(); woState(); woLastHint();
   $('woModal').classList.add('on');
   setTimeout(function(){ if(!w && window.innerWidth > 700) $('woName').focus(); }, 80);
 }
-function addSetRow(reps, kg){
+/* выбранное упражнение → если сегодня оно уже записано, продолжаем ту же карточку (без дублей) */
+function woPick(name){
+  woPicked = name; $('woName').value = name;
+  woHideSug();
+  const d = dayData(dDate);
+  const same = d && d.workout.find(function(x){ return normTxt(x.name) === normTxt(name) && x.id !== woEditId; });
+  if(same && !woEditId){
+    woEditId = same.id;
+    $('woSets').innerHTML = '';
+    same.sets.forEach(function(st){ addSetRow(st.reps, st.kg, true); });
+    const last = same.sets[same.sets.length - 1];
+    addSetRow(last ? last.reps : 10, last ? last.kg : '', false);
+    toast('Продолжаем: ' + name + ' — уже ' + same.sets.length + ' ' + plural(same.sets.length, 'подход', 'подхода', 'подходов'));
+  }
+  $('woRecentWrap').style.display = 'none';
+  woState(); woLastHint();
+}
+function woState(){
+  const v = $('woName').value.trim();
+  const valid = !!woPicked && normTxt(v) === normTxt(woPicked);
+  if(!valid) woPicked = null;
+  const noMatch = v.length >= 2 && !valid && !woFind(v).length;
+  $('woErr').style.display = noMatch ? '' : 'none';
+  $('woName').classList.toggle('bad', noMatch);
+  $('woName').classList.toggle('ok', valid);
+  $('woClear').style.display = v ? '' : 'none';
+  $('woSave').disabled = !valid;
+  $('woSets').classList.toggle('locked', !valid);
+}
+function woRenderSug(){
+  const v = $('woName').value;
+  woSugList = (woPicked && normTxt(v) === normTxt(woPicked)) ? [] : woFind(v);
+  woSugI = woSugList.length ? 0 : -1;
+  if(!woSugList.length){ woHideSug(); return; }
+  const nq = normTxt(v).split(' ')[0];
+  $('woSug').innerHTML = woSugList.map(function(e, i){
+    return '<button type="button" role="option" class="wo-opt' + (i === woSugI ? ' on' : '') + '" data-i="' + i + '"><b>' + hl(e.name, nq) + '</b>' + (e.hint ? '<small>' + esc(e.hint) + '</small>' : '') + '</button>';
+  }).join('');
+  $('woSug').style.display = '';
+  $('woName').setAttribute('aria-expanded', 'true');
+}
+function woHideSug(){ $('woSug').style.display = 'none'; $('woName').setAttribute('aria-expanded', 'false'); }
+function hl(t, q){
+  const s = esc(t); if(!q) return s;
+  const i = normTxt(t).indexOf(q);
+  return i < 0 ? s : esc(t.slice(0, i)) + '<mark>' + esc(t.slice(i, i + q.length)) + '</mark>' + esc(t.slice(i + q.length));
+}
+function addSetRow(reps, kg, done){
   const n = $('woSets').children.length + 1;
   const row = document.createElement('div');
-  row.className = 'setrow';
-  row.innerHTML = '<span class="set-n">' + n + '</span>' +
-    '<label><input type="number" inputmode="numeric" min="1" max="200" class="set-r" value="' + (reps || '') + '" placeholder="10" /><small>повт.</small></label>' +
-    '<span class="set-x">×</span>' +
-    '<label><input type="number" inputmode="decimal" min="0" max="500" step="0.5" class="set-k" value="' + (kg === 0 || kg ? kg : '') + '" placeholder="0" /><small>кг</small></label>' +
+  row.className = 'setrow' + (done ? ' done' : '');
+  row.innerHTML = '<span class="set-n"><small>Подход</small><b>' + n + '</b></span>' +
+    '<label><input type="number" inputmode="numeric" min="1" max="200" class="set-r" value="' + (reps || '') + '" placeholder="10" aria-label="Повторения" /></label>' +
+    '<label><input type="number" inputmode="decimal" min="0" max="500" step="0.5" class="set-k" value="' + (kg === 0 || kg ? kg : '') + '" placeholder="0" aria-label="Вес, кг" /></label>' +
+    '<button type="button" class="set-ok" aria-label="Сохранить подход"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>' +
     '<button type="button" class="set-del" aria-label="Удалить подход">' + D_ICON.x + '</button>';
   $('woSets').appendChild(row);
+  return row;
 }
-function renumberSets(){ Array.prototype.forEach.call($('woSets').children, function(r, i){ r.querySelector('.set-n').textContent = i + 1; }); }
+function renumberSets(){ Array.prototype.forEach.call($('woSets').children, function(r, i){ r.querySelector('.set-n b').textContent = i + 1; }); }
 function woLastHint(){
   // подсказка: что было в прошлый раз в этом упражнении — чтобы видеть прогресс
-  const name = normTxt($('woName').value);
+  const name = normTxt(woPicked || '');
   if(!name){ $('woLast').textContent = ''; return; }
   const days = Object.keys(diaryStore()).sort().reverse();
   for(let i = 0; i < days.length; i++){
-    if(days[i] === dDate && !woEditId) continue;
+    if(days[i] === dDate) continue;
     const w = (diaryStore()[days[i]].workout || []).find(function(x){ return normTxt(x.name) === name; });
     if(w){
       const best = Math.max.apply(null, w.sets.map(function(s){ return s.kg || 0; }));
@@ -1218,22 +1321,52 @@ function woLastHint(){
   }
   $('woLast').textContent = '';
 }
-function saveWorkout(){
-  const name = $('woName').value.trim();
-  if(!name){ toast('Выбери или впиши упражнение'); $('woName').focus(); return; }
-  const sets = Array.prototype.map.call($('woSets').children, function(r){
-    return { reps:Math.round(+r.querySelector('.set-r').value || 0), kg:r1(+String(r.querySelector('.set-k').value).replace(',', '.') || 0) };
-  }).filter(function(s){ return s.reps > 0; });
-  if(!sets.length){ toast('Добавь хотя бы один подход с повторами'); return; }
+/* записать упражнение (не закрывая окно). row — если нажали ✓ у конкретного подхода */
+function saveWorkout(row){
+  if(!woPicked){ toast('Выбери упражнение из списка'); $('woName').focus(); return false; }
+  const rows = Array.prototype.slice.call($('woSets').children);
+  const sets = [];
+  rows.forEach(function(r){
+    const reps = Math.round(+r.querySelector('.set-r').value || 0);
+    if(reps > 0) sets.push({ reps:reps, kg:r1(+String(r.querySelector('.set-k').value).replace(',', '.') || 0) });
+  });
+  if(!sets.length){ toast('Впиши повторения хотя бы в одном подходе'); const f = rows[0] && rows[0].querySelector('.set-r'); if(f) f.focus(); return false; }
   const d = dayData(dDate, true);
-  const ex = EXERCISES.find(function(e){ return normTxt(e.name) === normTxt(name); });
-  let id = woEditId;
-  if(id){ const w = d.workout.find(function(x){ return x.id === id; }); if(w){ w.name = name; w.sets = sets; w.exId = ex ? ex.id : null; } }
-  else { id = uid(); d.workout.push({ id:id, name:name, exId:ex ? ex.id : null, sets:sets }); }
+  const ex = EXERCISES.find(function(e){ return normTxt(e.name) === normTxt(woPicked); });
+  let w = woEditId ? d.workout.find(function(x){ return x.id === woEditId; }) : null;
+  let append = false;
+  if(!w){ w = d.workout.find(function(x){ return normTxt(x.name) === normTxt(woPicked); }); append = !!w; }   // то же упражнение сегодня — дописываем в ту же карточку
+  const isNew = !w;
+  if(w){ w.name = woPicked; w.sets = append ? w.sets.concat(sets) : sets; w.exId = ex ? ex.id : null; }
+  else { w = { id:uid(), name:woPicked, exId:ex ? ex.id : null, sets:sets }; d.workout.push(w); }
+  woEditId = w.id; woDirty = false;
   save();
-  $('woModal').classList.remove('on');
-  renderDiary({ flash:id });
-  toast(woEditId ? 'Упражнение обновлено' : 'Записал: ' + name);
+  rows.forEach(function(r){ r.classList.toggle('done', (+r.querySelector('.set-r').value || 0) > 0); });
+  renderDiary({ flash:w.id });
+  achCheck();
+  if(row){
+    const n = rows.indexOf(row) + 1;
+    toast('Подход ' + n + ' записан ✓');
+    // ✓ у последнего подхода — сразу открываем строку для следующего (копия этого)
+    if(row === rows[rows.length - 1]){
+      const nr = addSetRow(row.querySelector('.set-r').value, row.querySelector('.set-k').value, false);
+      nr.classList.add('new');
+      setTimeout(function(){ const f = nr.querySelector('.set-r'); f.focus(); f.select && f.select(); }, 30);
+    }
+  } else {
+    toast((isNew ? 'Записал: ' : 'Сохранил: ') + woPicked + ' · ' + sets.length + ' ' + plural(sets.length, 'подход', 'подхода', 'подходов'));
+  }
+  $('woTitle').textContent = 'Изменить упражнение';
+  $('woNext').style.display = '';
+  return true;
+}
+function woNextExercise(){
+  woEditId = null; woPicked = null; woLegacy = null; woDirty = false;
+  $('woName').value = ''; $('woSets').innerHTML = ''; addSetRow(10, '', false);
+  $('woTitle').textContent = 'Добавить упражнение';
+  $('woNext').style.display = 'none'; $('woLast').textContent = '';
+  woState(); woHideSug();
+  setTimeout(function(){ $('woName').focus(); }, 30);
 }
 
 /* ================= МОЙ ПРОГРЕСС ================= */
@@ -1333,7 +1466,7 @@ function saveBodyWeight(){
 function diaryInit(){
   $('dPrev').onclick = function(){ dDate = addDays(dDate, -7); renderDiary(); };
   $('dNext').onclick = function(){ dDate = addDays(dDate, 7); renderDiary(); };
-  $('dToday').onclick = function(){ dDate = today(); renderDiary(); };
+  $('dDateLabel').onclick = function(){ if(dDate !== today()){ dDate = today(); renderDiary(); } };
   $('dWeek').addEventListener('click', function(e){ const b = e.target.closest('[data-day]'); if(!b) return; dDate = b.dataset.day; renderDiary(); });
   // вода
   $('dWaterPlus').onclick = function(){ const d = dayData(dDate); setWater((d ? d.water : 0) + 250); };
@@ -1439,19 +1572,56 @@ function diaryInit(){
   // тренировка — модалка
   $('woAddSet').onclick = function(){
     const rows = $('woSets').children, last = rows[rows.length - 1];
-    addSetRow(last ? last.querySelector('.set-r').value : 10, last ? last.querySelector('.set-k').value : '');   // копия прошлого подхода
-    const nr = $('woSets').lastElementChild; nr.classList.add('new');
+    const nr = addSetRow(last ? last.querySelector('.set-r').value : 10, last ? last.querySelector('.set-k').value : '', false);   // копия прошлого подхода
+    nr.classList.add('new'); woDirty = true;
   };
   $('woSets').addEventListener('click', function(e){
+    const ok = e.target.closest('.set-ok');
+    if(ok){ saveWorkout(ok.closest('.setrow')); return; }
     const b = e.target.closest('.set-del'); if(!b) return;
     if($('woSets').children.length <= 1){ toast('Нужен хотя бы один подход'); return; }
-    b.closest('.setrow').remove(); renumberSets();
+    b.closest('.setrow').remove(); renumberSets(); woDirty = true;
+    if(woEditId) saveWorkout();                                    // удалили подход у записанного упражнения — сразу сохраняем
   });
-  $('woName').addEventListener('input', woLastHint);
-  $('woRecent').addEventListener('click', function(e){ const c = e.target.closest('.chip'); if(!c) return; $('woName').value = c.dataset.n; woLastHint(); });
-  $('woList').innerHTML = EXERCISES.map(function(e){ return '<option value="' + esc(e.name) + '">'; }).join('') +
-    ['Жим лёжа','Присед','Становая тяга','Бег','Велотренажёр','Эллипс','Скакалка'].map(function(n){ return '<option value="' + n + '">'; }).join('');
-  $('woSave').onclick = saveWorkout;
+  $('woSets').addEventListener('input', function(e){ const r = e.target.closest('.setrow'); if(r) r.classList.remove('done'); woDirty = true; });
+  // Enter в поле веса = ✓ (удобно на телефоне: «Готово» на клавиатуре)
+  $('woSets').addEventListener('keydown', function(e){
+    if(e.key !== 'Enter') return;
+    e.preventDefault();
+    const r = e.target.closest('.setrow'); if(!r) return;
+    if(e.target.classList.contains('set-r')) r.querySelector('.set-k').focus(); else saveWorkout(r);
+  });
+  // живой поиск упражнения
+  $('woName').addEventListener('input', function(){
+    const v = this.value;
+    const ex = woExact(v);
+    if(ex){ if(!woPicked || normTxt(woPicked) !== normTxt(ex.name)) woPick(ex.name); woState(); woLastHint(); return; }   // вписал точное название — как выбор из списка
+    else if(!(woLegacy && normTxt(v) === normTxt(woLegacy))) woPicked = null;
+    else woPicked = woLegacy;
+    woRenderSug(); woState(); woLastHint();
+  });
+  $('woName').addEventListener('focus', function(){ if(!woPicked) woRenderSug(); });
+  $('woName').addEventListener('blur', function(){ setTimeout(woHideSug, 180); });
+  $('woName').addEventListener('keydown', function(e){
+    if($('woSug').style.display === 'none' || !woSugList.length){ if(e.key === 'Enter'){ e.preventDefault(); if(woPicked){ const f = $('woSets').querySelector('.set-r'); if(f) f.focus(); } } return; }
+    if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      woSugI = (woSugI + (e.key === 'ArrowDown' ? 1 : -1) + woSugList.length) % woSugList.length;
+      $('woSug').querySelectorAll('.wo-opt').forEach(function(o, i){ o.classList.toggle('on', i === woSugI); });
+    } else if(e.key === 'Enter'){ e.preventDefault(); if(woSugI >= 0) woPick(woSugList[woSugI].name); }
+    else if(e.key === 'Escape'){ woHideSug(); }
+  });
+  // pointerdown, чтобы выбор срабатывал раньше, чем поле потеряет фокус
+  $('woSug').addEventListener('pointerdown', function(e){ const o = e.target.closest('.wo-opt'); if(!o) return; e.preventDefault(); woPick(woSugList[+o.dataset.i].name); });
+  $('woSug').addEventListener('click', function(e){ const o = e.target.closest('.wo-opt'); if(o && !woPicked) woPick(woSugList[+o.dataset.i].name); });
+  $('woClear').onclick = function(){ $('woName').value = ''; woPicked = null; woState(); woRenderSug(); $('woName').focus(); };
+  $('woRecent').addEventListener('click', function(e){ const c = e.target.closest('.chip'); if(!c) return; woPick(c.dataset.n); });
+  $('woSave').onclick = function(){ saveWorkout(null); };
+  $('woNext').onclick = woNextExercise;
+  // закрыли окно с несохранёнными подходами — сохраняем сами, чтобы ничего не потерять
+  $('woModal').addEventListener('click', function(e){
+    if((e.target === $('woModal') || e.target.closest('[data-close="woModal"]')) && woDirty && woPicked) saveWorkout(null);
+  }, true);
   // прогресс
   segInit('progTabs', function(v){ progTab = v; renderProgress(); });
   $('progEx').addEventListener('change', function(){ progEx = this.value; renderProgress(); });

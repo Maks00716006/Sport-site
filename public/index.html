@@ -282,11 +282,7 @@
     <!-- ---- TAB: ДНЕВНИК ---- -->
     <section class="tab" id="tab-diary">
       <div class="phead dhead">
-        <div>
-          <h1>Дневник</h1>
-          <p>Еда, вода и тренировки за день — всё в одном месте.</p>
-        </div>
-        <button class="btn sm ghost" type="button" id="dToday">Сегодня</button>
+        <h1>Дневник</h1>
       </div>
 
       <!-- неделя + стрик -->
@@ -298,7 +294,7 @@
         <div class="dweek-wrap">
           <div class="dweek-top">
             <button type="button" class="dnav" id="dPrev" aria-label="Прошлая неделя"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-            <b id="dDateLabel">Сегодня</b>
+            <button type="button" class="ddate" id="dDateLabel" title="Вернуться к сегодняшнему дню">Сегодня</button>
             <button type="button" class="dnav" id="dNext" aria-label="Следующая неделя"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
           </div>
           <div class="dweek" id="dWeek"></div>
@@ -745,13 +741,23 @@
       <button class="x" type="button" data-close="woModal" aria-label="Закрыть">&times;</button>
     </div>
     <div class="sheetbody">
-      <div class="field"><label for="woName">Упражнение</label><input id="woName" list="woList" type="text" placeholder="Жим лёжа, присед…" autocomplete="off" /><datalist id="woList"></datalist></div>
+      <div class="field wopick">
+        <label for="woName">Упражнение</label>
+        <div class="wo-inp">
+          <input id="woName" type="text" placeholder="Начни вводить: присед, жим, тяга…" autocomplete="off" autocapitalize="off" spellcheck="false"
+            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="woSug" />
+          <button type="button" class="wo-clear" id="woClear" aria-label="Выбрать другое упражнение" style="display:none">&times;</button>
+        </div>
+        <div class="wo-sug" id="woSug" role="listbox" style="display:none"></div>
+        <p class="wo-err" id="woErr" style="display:none">Такого упражнения нет — выбери из списка</p>
+      </div>
       <div id="woRecentWrap"><div class="fsub">Недавние</div><div class="chips" id="woRecent"></div></div>
       <p class="wolast" id="woLast"></p>
-      <div class="sethead"><span>Подход</span><span>Повторы × рабочий вес</span></div>
+      <div class="sethead"><span>Подход</span><span>Повторы</span><span>Вес, кг</span><span></span></div>
       <div class="sets" id="woSets"></div>
-      <button class="btn ghost wide" type="button" id="woAddSet">+ Подход (копия прошлого)</button>
-      <button class="btn wide" type="button" id="woSave">Сохранить</button>
+      <button class="btn ghost wide" type="button" id="woAddSet">+ Добавить подход</button>
+      <button class="btn wide" type="button" id="woSave" disabled>Сохранить</button>
+      <button class="linkbtn wo-next" type="button" id="woNext" style="display:none">Следующее упражнение →</button>
     </div>
   </div>
 </div>
