@@ -314,6 +314,9 @@
         </div>
       </div>
 
+      <!-- разбор дня от ИИ-ментора -->
+      <div class="dcard dreview" id="dReview" style="display:none"></div>
+
       <!-- приёмы пищи -->
       <div class="dmeals" id="dMeals"></div>
 
@@ -474,6 +477,13 @@
             <input type="checkbox" id="qtToggle" checked />
             <i class="sw" aria-hidden="true"></i>
           </label>
+          <label class="pd-toggle">
+            <span><b>Напоминания</b><small>Вода, еда и день тренировки — короткой плашкой, пока сайт открыт</small></span>
+            <input type="checkbox" id="rmToggle" checked />
+            <i class="sw" aria-hidden="true"></i>
+          </label>
+          <div class="rmdays-wrap" id="rmDaysWrap"><small>Мои дни тренировок</small><div class="rmdays" id="rmDays"></div></div>
+          <button class="btn ghost wide sumopen" type="button" id="sumOpen">Итоги недели и месяца</button>
         </section>
         <section class="pd-sec acc" data-acc="history">
           <button class="acc-h" type="button" aria-expanded="false">
@@ -773,10 +783,34 @@
       <div class="field" id="progExWrap" style="display:none"><label for="progEx">Упражнение</label><select id="progEx"></select></div>
       <div class="kpis prog-kpis" id="progKpis"></div>
       <div class="chartbox"><canvas id="progChart" class="progchart"></canvas></div>
+      <p class="prog-note" id="progNote"></p>
+      <div class="prog-recs" id="progRecs"></div>
     </div>
   </div>
 </div>
 
+<!-- итоги недели / месяца -->
+<div class="modal" id="sumModal">
+  <div class="sheet">
+    <div class="sheethead">
+      <h3>Итоги</h3>
+      <button class="x" type="button" data-close="sumModal" aria-label="Закрыть">&times;</button>
+    </div>
+    <div class="sheetbody">
+      <div class="seg" id="sumKind"><button type="button" data-v="week" class="on">Неделя</button><button type="button" data-v="month">Месяц</button></div>
+      <div class="sum-nav">
+        <button type="button" class="dnav" id="sumPrev" aria-label="Раньше"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <div class="sum-lbl" id="sumLabel"></div>
+        <button type="button" class="dnav" id="sumNext" aria-label="Позже"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      </div>
+      <p class="sum-verdict" id="sumVerdict"></p>
+      <div class="kpis sum-kpis" id="sumKpis"></div>
+      <div id="sumPrs"></div>
+    </div>
+  </div>
+</div>
+
+<div class="nudge" id="nudge" role="status" aria-live="polite" hidden></div>
 <div class="toast" id="toast"></div>
 <div class="qt-root" id="qtRoot" aria-live="polite"></div>
 
@@ -790,6 +824,7 @@
 <script src="static/quotes.js?v=dev"></script>
 <script src="static/chat.js?v=dev"></script>
 <script src="static/path-fix.js?v=dev"></script>
+<script src="static/extras.js?v=dev"></script>
 <script src="static/app.js?v=dev"></script>
 
 </body>

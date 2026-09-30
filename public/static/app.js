@@ -219,12 +219,14 @@ function enter(key, remember){
   achInit(); updateFab();
   $('qtToggle').checked = QuoteToasts.enabled();
   QuoteToasts.start();
+  if(typeof Extras !== 'undefined') Extras.init();
   window.scrollTo(0, 0);
 }
 function leave(){
   clearSession();
   KEY = null; ME = null;
   QuoteToasts.stop();
+  if(typeof Extras !== 'undefined') Extras.stop();
   Chat.reset();
   closeProfile();
   $('app').style.display = 'none';
@@ -1145,6 +1147,7 @@ function miniCard(r, extra){
 
 function renderProfile(){
   const p = ME.profile, st = achStats();
+  if(typeof Extras !== 'undefined') Extras.renderRemindSettings();
   $('pdAva').textContent = (ME.name || '?').trim().charAt(0).toUpperCase();
   $('pdName').textContent = ME.name;
   $('pdMail').textContent = KEY;

@@ -115,6 +115,7 @@ function renderDiary(opt){
   renderWater();
   $('dDateLabel').innerHTML = esc(humanDate(dDate)) + (dDate !== today() ? ' <small>→ к сегодня</small>' : '');
   $('dDateLabel').classList.toggle('back', dDate !== today());
+  if(typeof Extras !== 'undefined') Extras.renderReview();
 }
 
 function renderWeekStrip(){
@@ -218,7 +219,7 @@ function renderWorkout(flash){
     : 'Запиши упражнения, подходы и рабочие веса';
   $('dWoList').innerHTML = list.length ? list.map(function(w){
     return '<div class="ditem wo' + (w.id === flash ? ' flash' : '') + '" data-food="' + w.id + '">' +
-      '<div class="ditem-t"><b>' + esc(w.name) + ' <small class="wkcal">≈ ' + woBurn(w.name, w.sets) + ' ккал</small></b><div class="wsets">' + w.sets.map(function(st, i){
+      '<div class="ditem-t"><b>' + esc(w.name) + (w.pr ? ' <small class="wpr" title="Новый рекорд">🏆</small>' : '') + ' <small class="wkcal">≈ ' + woBurn(w.name, w.sets) + ' ккал</small></b><div class="wsets">' + w.sets.map(function(st, i){
         const k = woKind(w.name);
         return '<span><i>' + (i + 1) + '</i>' + st.reps + (k.t === 'cardio' ? ' мин' : k.t === 'time' ? ' сек' : st.kg ? ' × ' + r1(st.kg) + ' кг' : ' повт.') + '</span>'; }).join('') + '</div></div>' +
       '<button type="button" class="ditem-e" aria-label="Изменить" onclick="openWorkoutModal(\'' + w.id + '\')">' + D_ICON.edit + '</button>' +
@@ -1558,6 +1559,7 @@ function saveWorkout(row){
   if(w){ w.name = woPicked; w.sets = append ? w.sets.concat(sets) : sets; w.exId = ex ? ex.id : null; }
   else { w = { id:uid(), name:woPicked, exId:ex ? ex.id : null, sets:sets }; d.workout.push(w); }
   woEditId = w.id; woDirty = false;
+  if(typeof Extras !== 'undefined') Extras.checkPR(w, dDate);         // новый рекорд 1ПМ → 🏆
   save();
   rows.forEach(function(r){ r.classList.toggle('done', (+r.querySelector('.set-r').value || 0) > 0); });
   renderDiary({ flash:w.id });
@@ -1590,21 +1592,12 @@ function woNextExercise(){
 
 /* ================= МОЙ ПРОГРЕСС ================= */
 let progTab = 'body', progEx = null;
-function strengthSeries(name){
-  const nn = normTxt(name), out = [];
-  Object.keys(diaryStore()).sort().forEach(function(ds){
-    (diaryStore()[ds].workout || []).forEach(function(w){
-      if(normTxt(w.name) !== nn) return;
-      const best = Math.max.apply(null, w.sets.map(function(s){ return s.kg || 0; }));
-      const e1rm = Math.max.apply(null, w.sets.map(function(s){ return (s.kg || 0) * (1 + (s.reps || 0) / 30); }));   // формула Эпли
-      out.push({ date:ds, kg:best, e1rm:e1rm, vol:woVolume(w) });
-    });
-  });
-  return out;
-}
+function strengthSeries(name){ return Extras.sessions(name); }
 function loggedExercises(){
+  // для графика силы — только упражнения, где записан вес (у кардио и планки 1ПМ нет)
   const cnt = {};
-  Object.keys(diaryStore()).forEach(function(ds){ (diaryStore()[ds].workout || []).forEach(function(w){ cnt[w.name] = (cnt[w.name] || 0) + 1; }); });
+  Object.keys(diaryStore()).forEach(function(ds){ (diaryStore()[ds].workout || []).forEach(function(w){
+    if(woKind(w.name).t === 'reps' && w.sets.some(function(x){ return (+x.kg || 0) > 0; })) cnt[w.name] = (cnt[w.name] || 0) + 1; }); });
   return Object.keys(cnt).sort(function(a, b){ return cnt[b] - cnt[a]; });
 }
 function openProgress(tab){
@@ -1630,16 +1623,24 @@ function renderProgress(){
   } else {
     const ex = loggedExercises();
     $('progEx').innerHTML = ex.length ? ex.map(function(n){ return '<option' + (n === progEx ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') : '<option>Пока нет тренировок</option>';
-    const s = progEx ? strengthSeries(progEx) : [];
+    const s = progEx ? strengthSeries(progEx).filter(function(x){ return x.e1rm > 0; }) : [];
     $('progKpis').innerHTML = s.length ? (function(){
-      const best = Math.max.apply(null, s.map(function(x){ return x.kg; })), first = s[0].kg, last = s[s.length-1].kg;
-      const e = Math.max.apply(null, s.map(function(x){ return x.e1rm; }));
-      return '<div class="kpi"><b>' + r1(best) + '</b><span>лучший вес, кг</span></div>' +
-        '<div class="kpi ' + (last > first ? 'good' : '') + '"><b>' + (last - first > 0 ? '+' : '') + r1(last - first) + '</b><span>прирост, кг</span></div>' +
-        '<div class="kpi"><b>' + Math.round(e) + '</b><span>≈ разовый максимум</span></div>';
+      const e = Math.max.apply(null, s.map(function(x){ return x.e1rm; })), cur = s[s.length-1].e1rm, first = s[0].e1rm;
+      const bestKg = s.reduce(function(m, x){ return x.kg > m.kg ? x : m; }, s[0]);
+      const gain = first ? Math.round((cur - first) / first * 100) : 0;
+      return '<div class="kpi good"><b>' + Math.round(e) + '<small> кг</small></b><span>рекорд 1ПМ</span></div>' +
+        '<div class="kpi"><b>' + r1(bestKg.kg) + '<small>×' + bestKg.reps + '</small></b><span>лучший подход</span></div>' +
+        '<div class="kpi ' + (gain > 0 ? 'good' : '') + '"><b>' + (gain > 0 ? '+' : '') + gain + '%</b><span>сила с начала</span></div>';
     })() : '';
-    requestAnimationFrame(function(){ drawSeries(cv, s.map(function(x){ return { d:x.date, v:x.kg }; }), 'кг', progEx ? 'Запиши это упражнение хотя бы в двух тренировках — появится график' : 'Добавь упражнения в «Тренировку» — здесь появится рост рабочих весов'); });
+    $('progNote').textContent = s.length ? '1ПМ — примерный вес на один раз, считается по твоим подходам (формулы Эпли и Бжицки). Сам на 1 раз без страховки не проверяй.' : '';
+    // список рекордов по всем упражнениям — тап переключает график
+    const recs = Extras.records();
+    $('progRecs').innerHTML = recs.length ? '<div class="fsub">Мои рекорды</div>' + recs.map(function(r){
+      return '<button type="button" class="prec' + (normTxt(r.name) === normTxt(progEx || '') ? ' on' : '') + '" data-n="' + esc(r.name) + '"><span><b>' + esc(r.name) + '</b><small>' + r1(r.kg) + ' кг × ' + r.reps + ' · ' + fmtDate(r.date) + '</small></span><em>' + Math.round(r.e1rm) + '<small> кг 1ПМ</small></em></button>';
+    }).join('') : '';
+    requestAnimationFrame(function(){ drawSeries(cv, s.map(function(x){ return { d:x.date, v:Math.round(x.e1rm * 10) / 10 }; }), 'кг', progEx ? 'Запиши это упражнение с весом хотя бы в двух тренировках — появится график силы' : 'Добавь упражнения с весом в «Тренировку» — здесь появится график силы'); });
   }
+  if(progTab !== 'str'){ $('progRecs').innerHTML = ''; $('progNote').textContent = ''; }
 }
 /* универсальный линейный график (в стиле графика веса) */
 function drawSeries(cv, pts, unit, emptyText){
@@ -1875,5 +1876,6 @@ function diaryInit(){
   // прогресс
   segInit('progTabs', function(v){ progTab = v; renderProgress(); });
   $('progEx').addEventListener('change', function(){ progEx = this.value; renderProgress(); });
+  $('progRecs').addEventListener('click', function(e){ const b = e.target.closest('.prec'); if(!b) return; progEx = b.dataset.n; renderProgress(); });
   window.addEventListener('resize', function(){ if($('progModal').classList.contains('on')) renderProgress(); });
 }
