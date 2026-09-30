@@ -1482,3 +1482,6 @@
     .fp-amount label{padding:4px 8px;min-width:0;}
     .fp-amount input{width:76px;font-size:24px;}
   }
+  .bcpack{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;font-size:13.5px;text-align:center;cursor:pointer;min-height:44px;line-height:1.35;}
+  .bcpack svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;flex:none;}
+  .bcpack.busy{opacity:.5;pointer-events:none;}

@@ -330,18 +330,20 @@ function normTxt(s){ return String(s).toLowerCase().replace(/ё/g, 'е').replace
 function localSearch(q){
   const nq = normTxt(q);
   const recipes = ALL_RECIPES.map(function(r){ return { id:'r' + r.id, name:r.name, kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:false, src:'recipe', cat:r.shake ? 'Коктейль с сайта' : 'Рецепт с сайта' }; });
-  const all = FOODS.concat(recipes);
+  const mine = MyBarcodes.list().map(function(x){ return Object.assign({}, x, { cat:'Мои продукты', mine:true }); });
+  const all = mine.concat(FOODS, recipes);
   if(!nq){
     // без запроса — недавние продукты пользователя
     return recentFoods();
   }
   const words = nq.split(' ');
   return all.map(function(x){
-    const n = normTxt(x.name);
-    if(!words.every(function(w){ return n.indexOf(w) >= 0; })) return null;
+    const n = normTxt(x.name), nb0 = normTxt((x.brand || '') + ' ' + x.name);
+    if(!words.every(function(w){ return nb0.indexOf(w) >= 0; })) return null;
     let score = (n.indexOf(nq) === 0 ? 0 : n.indexOf(' ' + words[0]) >= 0 || n.indexOf(words[0]) === 0 ? 1 : 2) + n.length / 100;
     if(x.cat === 'Крупы сухие') score += .6;          // сначала готовые блюда, сухие крупы — ниже
     if(x.src === 'recipe') score += .3;
+    if(x.mine) score -= .5;                             // свои сохранённые товары — выше
     return { x:x, s:score };
   }).filter(Boolean).sort(function(a, b){ return a.s - b.s; }).slice(0, 12).map(function(o){ return o.x; });
 }
@@ -385,7 +387,7 @@ function renderLocalResults(q){
    Лимиты OFF: 15 запросов/мин на товар и 10/мин на поиск, поиск «на каждую букву» запрещён —
    поэтому поиск по магазинным товарам запускается по кнопке или Enter и кэшируется. */
 /* ---- граммы или миллилитры: напитки считаем в мл (КБЖУ «на 100 мл», плотность ≈ 1) ---- */
-const LIQUID_RE = /(^|[\s«"(,])(вода|минералк|газировк|сок|соки|нектар|морс|компот|молоко|кефир|ряженк|айран|тан\b|снежок|простокваш|напиток|напитк|лимонад|кола|cola|pepsi|пепси|спрайт|sprite|фанта|fanta|энергетик|квас|пиво|вино|шампанск|чай|кофе|капучино|латте|раф\b|какао|смузи|коктейл|бульон|питьев|water|juice|milk|drink|soda|beer|tea|coffee)/i;
+const LIQUID_RE = /(^|[\s«"(,])(вода|минералк|газировк|сок|соки|нектар|морс|компот|молоко|кефир|ряженк|айран|тан(?![а-яёa-z])|снежок|простокваш|напиток|напитк|лимонад|кола|cola|pepsi|пепси|спрайт|sprite|фанта|fanta|энергетик|квас|пиво|вино|шампанск|чай|кофе|капучино|латте|раф(?![а-яёa-z])|какао|смузи|коктейл|бульон|питьев|water|juice|milk|drink|soda|beer|tea|coffee)/i;
 function isLiquid(name){ const n = String(name || ''); return LIQUID_RE.test(n) && !/сгущ|шоколад|конфет|печень|батончик|мороже|сухое молоко|порошок|сухой|зерн|молотый|растворим/i.test(n); }
 function unitOf(x){ return x && x.unit === 'ml' ? 'мл' : 'г'; }
 
@@ -422,10 +424,13 @@ const MyBarcodes = {
     for(let i = 0; i < vs.length; i++) if(a[vs[i]]) return Object.assign({}, a[vs[i]], { code:code });
     return null;
   },
+  /* всё сохранённое — для поиска по названию («Мои продукты») */
+  list: function(){ const a = this.all(); return Object.keys(a).map(function(k){ return a[k]; }).sort(function(x, y){ return y.at - x.at; }); },
   put: function(p){
-    if(!p || !p.code || p.kcal == null) return;
+    if(!p || !p.name || p.kcal == null) return;
     const a = this.all();
-    a[p.code] = { id:'b' + p.code, code:p.code, name:p.name, brand:p.brand || '', qty:p.qty || '', kcal:p.kcal, p:p.p, f:p.f, c:p.c, s:p.s == null ? null : p.s,
+    const key = p.code || ('n:' + normTxt((p.brand ? p.brand + ' ' : '') + p.name));   // товар без штрих-кода — по названию
+    a[key] = { id:'b' + key, code:p.code || '', name:p.name, brand:p.brand || '', qty:p.qty || '', kcal:p.kcal, p:p.p, f:p.f, c:p.c, s:p.s == null ? null : p.s,
       per100:true, portion:p.portion || 100, src:p.src || 'my', ru:!!p.ru, cat:p.cat || '', unit:p.unit === 'ml' ? 'ml' : 'g', at:Date.now() };
     const keys = Object.keys(a);
     if(keys.length > this.max) keys.sort(function(x, y){ return a[x].at - a[y].at; }).slice(0, keys.length - this.max).forEach(function(k){ delete a[k]; });
@@ -483,7 +488,7 @@ const WebBarcode = {
     return { id:'w' + code, code:code, name:String(o.name).trim().slice(0, 80), brand:String(o.brand || '').trim().slice(0, 60), qty:String(o.qty || '').slice(0, 30),
       kcal:r1(kcal), p:r1(Math.max(0, n(h.p) || 0)), f:r1(Math.max(0, n(h.f) || 0)), c:r1(c), s:sg == null ? null : r1(Math.max(0, sg)),
       per100:true, portion:100, src:'web', web:String(o.source || '').slice(0, 300), ru:/^46/.test(code), cat:'',
-      unit:(o.unit === 'ml' || /мл|ml|\bл\b/i.test(String(o.qty || '')) || isLiquid(o.name)) ? 'ml' : 'g' };
+      unit:(o.unit === 'ml' || /мл|ml|\d\s*л(?![а-яёa-z])/i.test(String(o.qty || '')) || isLiquid(o.name)) ? 'ml' : 'g' };
   }
 };
 
@@ -492,7 +497,7 @@ const OFF = {
   timeout: function(ms){ const c = new AbortController(); setTimeout(function(){ c.abort(); }, ms); return c.signal; },
   /* напиток? — объём на упаковке (мл/л), единица количества, категория или название */
   liquid: function(p, name){
-    if(/\d\s*(мл|ml|л|l|cl|сл)\b/i.test(String(p.quantity || ''))) return true;
+    if(/\d\s*(мл|ml|л|l|cl|сл)(?![а-яёa-z])/i.test(String(p.quantity || ''))) return true;
     if(/^(ml|l|cl|мл|л)$/i.test(String(p.product_quantity_unit || ''))) return true;
     if(/ml/i.test(String(p.nutrition_data_per || ''))) return true;
     if((p.categories_tags || []).some(function(t){ return /en:(beverages|waters|juices|milks|plant-based-milks|sodas|energy-drinks|drinkable-yogurts|kefirs|teas|coffees|beers|wines|nectars)/.test(t); })) return true;
@@ -587,7 +592,9 @@ function showPortion(item){
   if(!item) return;
   $('fpName').textContent = item.name;
   $('fpBrand').textContent = [item.brand, item.qty, item.code ? 'штрих-код ' + item.code : '',
-    item.src === 'web' ? 'найдено в интернете — сверь КБЖУ с упаковкой' : item.src === 'label' ? 'прочитано с этикетки' : item.src === 'usda' ? 'база USDA' : ''].filter(Boolean).join(' · ');
+    item.src === 'web' ? 'найдено в интернете — сверь КБЖУ с упаковкой' : item.src === 'label' ? 'прочитано с этикетки' : item.src === 'usda' ? 'база USDA' :
+    item.src === 'match' ? (item.note || 'похожий товар из базы') + ' — сверь с упаковкой' : item.src === 'estimate' ? 'КБЖУ примерные (по типичному составу) — сверь с упаковкой' : '',
+    item.mine ? 'мои продукты' : ''].filter(Boolean).join(' · ');
   $('fpPer').textContent = item.per100
     ? 'На 100 ' + unitOf(item) + ': ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s)
     : 'На 1 порцию: ' + item.kcal + ' ккал · Б ' + item.p + ' · Ж ' + item.f + ' · У ' + item.c + ' · Сахар ' + (item.s == null ? 'нет данных' : item.s);
@@ -950,11 +957,11 @@ function barcodeNotFound(code, offline, partial){
     '<b>' + (partial ? 'Добавим КБЖУ за 5 секунд' : 'Добавим этот товар за 5 секунд') + '</b>' +
     '<span>' + (ai ? 'Сфоткай на упаковке таблицу «Пищевая ценность» — ИИ прочитает калории, БЖУ и сахар. Товар запомнится: в следующий раз скан найдёт его сразу.'
                    : 'Впиши КБЖУ с упаковки — товар запомнится за этим штрих-кодом.') + '</span>' +
-    (ai ? '<label class="btn wide bcnf-main"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Сфоткать этикетку<input id="bcLabelFile" type="file" accept="image/*" capture="environment" hidden /></label>' +
-          '<label class="linkbtn bcnf-gal">или выбрать фото из галереи<input id="bcLabelGal" type="file" accept="image/*" hidden /></label>' : '') +
+    (ai ? '<label class="btn wide bcnf-main"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Сфоткать упаковку<input id="bcLabelFile" type="file" accept="image/*" capture="environment" hidden /></label>' +
+          '<label class="linkbtn bcnf-gal">или выбрать 1–3 фото из галереи (лицевая сторона + состав)<input id="bcLabelGal" type="file" accept="image/*" multiple hidden /></label>' : '') +
     '<div class="bcnf-alt"><button type="button" class="btn ghost sm" id="bcNfManual">Ввести вручную</button><button type="button" class="btn ghost sm" id="bcNfSearch">Найти по названию</button></div>';
   $('bcNf').style.display = '';
-  const onPick = function(){ const f = this.files[0]; this.value = ''; if(f) readLabel(f); };
+  const onPick = function(){ const f = Array.prototype.slice.call(this.files || []); this.value = ''; if(f.length) readLabel(f); };
   if($('bcLabelFile')) $('bcLabelFile').addEventListener('change', onPick);
   if($('bcLabelGal')) $('bcLabelGal').addEventListener('change', onPick);
   $('bcNfManual').onclick = function(){ $('fmCode').value = code; $('fmName').value = bcPending.name || ''; segSet('fmUnit', isLiquid(bcPending.name) ? 'ml' : 'g'); foodTab('manual'); };
@@ -964,22 +971,49 @@ function barcodeNotFound(code, offline, partial){
   };
   requestAnimationFrame(function(){ if($('bcNf').scrollIntoView) $('bcNf').scrollIntoView({ block:'nearest', behavior:'smooth' }); });
 }
-async function readLabel(file){
-  const pend = bcPending; if(!pend) return;
-  $('bcNf').querySelectorAll('.btn,.linkbtn').forEach(function(b){ b.classList.add('busy'); });
-  bcStatus('<span class="spin"></span> ИИ читает этикетку…');
+/* единица: что написано на упаковке (вес «270 г» / объём «1 л») важнее всего остального */
+function labelUnit(r, nut, name){
+  const q = String(r.qty || '');
+  if(/\d\s*(г|гр|кг|g|kg)(?![а-яёa-z])/i.test(q)) return 'g';
+  if(/\d\s*(мл|л|ml|l)(?![а-яёa-z])/i.test(q)) return 'ml';
+  if(r.unit === 'ml' || r.unit === 'g') return r.unit;
+  return (nut && nut.unit === 'ml') || isLiquid(name) ? 'ml' : 'g';
+}
+/* фото упаковки → продукт. Работает и после «штрих-кода нет в базах», и без штрих-кода вообще.
+   Таблицу не разглядели, но название прочитали — ищем КБЖУ по названию. Результат сохраняется в «Мои продукты». */
+async function readLabel(files){
+  const pend = bcPending || { code:'', name:'', brand:'', qty:'' };
+  const box = $('bcNf').style.display !== 'none' ? $('bcNf') : $('fPane-barcode');
+  box.querySelectorAll('.btn,.linkbtn').forEach(function(b){ b.classList.add('busy'); });
+  const st = function(t){ bcStatus('<span class="spin"></span> ' + t); };
+  st('ИИ читает упаковку' + (files.length > 1 ? ' (' + files.length + ' фото)' : '') + '…');
   try {
-    const r = await VisionAI.label(file);
-    if(!r || r.kcal == null){ bcStatus('Не получилось прочитать КБЖУ. Сфоткай табличку «Пищевая ценность» ближе и ровнее — или введи вручную.', 'warn'); return; }
-    const p = { id:'b' + pend.code, code:pend.code, name:pend.name || r.name || 'Товар ' + pend.code, brand:pend.brand || r.brand || '', qty:pend.qty || r.qty || '',
-      kcal:r.kcal, p:r.p, f:r.f, c:r.c, s:r.s, per100:true, portion:r.portion || 100, src:'label', ru:/^46/.test(pend.code), cat:'', unit:(r.unit === 'ml' || isLiquid(pend.name)) ? 'ml' : 'g' };
+    const r = await VisionAI.label(files);
+    if(!r){ bcStatus('На фото не видно ни названия, ни таблицы КБЖУ. Сфоткай лицевую сторону и табличку «Пищевая ценность» — можно 2 фото сразу.', 'warn'); return; }
+    const name = pend.name || r.name;
+    let nut = r.per100, src = 'label', note = '';
+    if(!nut){
+      if(!name){ bcStatus('Не разглядел ни таблицу, ни название. Сфоткай ближе и ровнее, без бликов.', 'warn'); return; }
+      const f = await VisionAI.byName(name, pend.brand || r.brand, st);
+      if(!f){
+        bcStatus('Прочитал «' + esc(name) + '», но КБЖУ не нашёл. Сфоткай табличку «Пищевая ценность» или <button type="button" class="linkbtn" id="bcToManual">введи вручную</button>.', 'warn');
+        $('bcToManual').onclick = function(){ $('fmName').value = name; $('fmCode').value = pend.code || ''; segSet('fmUnit', isLiquid(name) ? 'ml' : 'g'); foodTab('manual'); };
+        return;
+      }
+      nut = f; src = f.src;
+      note = f.src === 'match' ? 'похожий товар из базы: «' + f.matched + '»' : '';
+    }
+    const code = pend.code || '';
+    const p = { id:'b' + (code || normTxt(name)), code:code, name:name || ('Товар ' + code), brand:pend.brand || r.brand || '', qty:pend.qty || r.qty || '',
+      kcal:nut.kcal, p:nut.p, f:nut.f, c:nut.c, s:nut.s, per100:true, portion:r.portion || 100, src:src, note:note, ru:/^46/.test(code), cat:'',
+      unit:labelUnit(r, nut, name) };
     MyBarcodes.put(p);
-    bcStatus('Готово: ' + esc(p.name) + ' — запомнил за этим штрих-кодом.', 'ok');
+    bcStatus('Готово: ' + esc(p.name) + ' — сохранил в «Мои продукты»' + (code ? ' и за штрих-кодом' : '') + '.', 'ok');
     $('bcNf').style.display = 'none';
     showPortion(p);
   } catch(e){
     bcStatus(esc(e && e.message && !/^(image|timeout)$/.test(e.message) ? e.message : 'Не получилось прочитать фото. Попробуй ещё раз.'), 'warn');
-  } finally { $('bcNf').querySelectorAll('.busy').forEach(function(b){ b.classList.remove('busy'); }); }
+  } finally { document.querySelectorAll('#fPane-barcode .busy').forEach(function(b){ b.classList.remove('busy'); }); }
 }
 
 /* ================= РАСПОЗНАВАНИЕ ЕДЫ ПО ФОТО (Vision AI) =================
@@ -1123,36 +1157,93 @@ const VisionAI = {
   },
   /* фото этикетки → КБЖУ на 100 г */
   labelPrompt: [
-    'На фото — упаковка продукта. Найди таблицу «Пищевая ценность» (Nutrition facts) и прочитай значения НА 100 г (или 100 мл).',
-    'Если указано только на порцию — пересчитай на 100 г по весу порции. Если энергия только в кДж — переведи в ккал (÷4.184).',
-    'Сахар: «в т.ч. сахара» / «sugars»; если не указан — null. Также прочитай название, бренд и вес упаковки, если видны.',
-    'Определи, напиток это или твёрдая еда: если на этикетке «на 100 мл», объём в мл/л или это вода, сок, молоко, кефир, энергетик — unit "ml", иначе "g".',
-    'Ответь ТОЛЬКО JSON без markdown: {"found":true,"name":"","brand":"","qty":"","unit":"g","portion":100,"per100":{"kcal":0,"p":0,"f":0,"c":0,"s":0}}.',
-    'Если таблицы не видно или она нечитаема — {"found":false}. Ничего не выдумывай.'
+    'На фото — упаковка продукта питания (одна или несколько сторон: лицевая с названием и обратная с составом).',
+    'ШАГ 1. Всегда прочитай НАЗВАНИЕ продукта (крупный текст на лицевой стороне или строка «Наименование»/название над таблицей и составом), БРЕНД и вес/объём упаковки — даже если таблицы пищевой ценности не видно.',
+    'ШАГ 2. Найди таблицу «Пищевая ценность» / «Энергетическая ценность» (Nutrition facts) и прочитай значения НА 100 г (или 100 мл): ккал, белки, жиры, углеводы, в т.ч. сахара.',
+    'Если указано только на порцию — пересчитай на 100 г по весу порции. Если энергия только в кДж — переведи в ккал (÷4.184). Сахар не указан — null.',
+    'Если таблицы нет или цифры не читаются — "per100": null (НЕ выдумывай цифры), но название и бренд всё равно заполни.',
+    'Напиток или жидкость (вода, сок, молоко, кефир, энергетик, «на 100 мл», объём в мл/л) — unit "ml", иначе "g".',
+    'Ответь ТОЛЬКО JSON без markdown: {"name":"","brand":"","qty":"","unit":"g","portion":100,"per100":{"kcal":0,"p":0,"f":0,"c":0,"s":null}}.',
+    'Если на фото вообще нет упаковки еды — {"name":"","per100":null}.'
   ].join(' '),
-  label: async function(file){
+  /* nut: достаём и проверяем КБЖУ на 100 г из объекта ответа ИИ */
+  nut100: function(h){
+    if(!h || typeof h !== 'object') return null;
+    const n = VisionAI.num;
+    const kcal = n(h.kcal != null ? h.kcal : h.calories);
+    if(kcal == null || kcal < 0 || kcal > 950) return null;
+    const pr = n(h.p != null ? h.p : h.protein) || 0, fa = n(h.f != null ? h.f : h.fat) || 0, ca = n(h.c != null ? h.c : h.carbs) || 0;
+    if(!kcal && !pr && !fa && !ca && !/вода|water/i.test(String(h._name || ''))) return null;
+    let sg = n(h.s != null ? h.s : h.sugar); if(sg != null && sg > ca) sg = ca;
+    return { kcal:r1(kcal), p:r1(Math.max(0, pr)), f:r1(Math.max(0, fa)), c:r1(Math.max(0, ca)), s:sg == null ? null : r1(Math.max(0, sg)) };
+  },
+  /* фото упаковки (1–3 снимка) → { name, brand, qty, unit, portion, per100 | null } */
+  label: async function(files){
     if(!this.site()) throw new Error('ИИ сайта не настроен — введи КБЖУ вручную.');
-    const dataUrl = await this.downscale(file, 1280);          // мелкий текст этикетки — берём фото покрупнее
+    files = (Array.isArray(files) ? files : [files]).filter(Boolean).slice(0, 3);
+    const urls = [];
+    for(let i = 0; i < files.length; i++) urls.push(await this.downscale(files[i], files.length > 1 ? 1024 : 1280));   // мелкий текст — фото покрупнее
+    const content = [ { type:'text', text:'Прочитай название и пищевую ценность с упаковки. Только JSON.' } ]
+      .concat(urls.map(function(u){ return { type:'image_url', image_url:{ url:u } }; }));
     const models = await window.siteAI.models(true);
-    const r = await window.siteAI.fetch({ temperature:0,
-      messages:[ { role:'system', content:VisionAI.labelPrompt },
-                 { role:'user', content:[ { type:'text', text:'Прочитай пищевую ценность с этикетки. Только JSON.' }, { type:'image_url', image_url:{ url:dataUrl } } ] } ] },
-      { models:models, timeout:45000 });
+    const r = await window.siteAI.fetch({ temperature:0, messages:[ { role:'system', content:VisionAI.labelPrompt }, { role:'user', content:content } ] }, { models:models, timeout:50000 });
     if(r.status === 402 || r.status === 429) throw new Error('ИИ сейчас занят или дневной лимит закончился — введи КБЖУ вручную.');
     if(!r.ok) throw new Error('Сервис распознавания ответил ошибкой ' + r.status + '.');
     const j = await r.json();
     const m = j.choices && j.choices[0] && j.choices[0].message;
     const o = VisionAI.parseJson(m && (typeof m.content === 'string' ? m.content : (m.content || []).map(function(x){ return x.text || ''; }).join('')));
-    if(!o || o.found === false) return null;
-    const h = o.per100 || o, n = VisionAI.num;
-    const kcal = n(h.kcal != null ? h.kcal : h.calories);
-    if(kcal == null || kcal < 0 || kcal > 950) return null;
-    const pr = n(h.p != null ? h.p : h.protein) || 0, fa = n(h.f != null ? h.f : h.fat) || 0, ca = n(h.c != null ? h.c : h.carbs) || 0;
-    let sg = n(h.s != null ? h.s : h.sugar); if(sg != null && sg > ca) sg = ca;
-    return { name:String(o.name || '').trim().slice(0, 80), brand:String(o.brand || '').trim().slice(0, 60), qty:String(o.qty || '').slice(0, 30),
-      portion:Math.min(1000, Math.max(0, Math.round(n(o.portion) || 0))) || 100,
-      kcal:r1(kcal), p:r1(Math.max(0, pr)), f:r1(Math.max(0, fa)), c:r1(Math.max(0, ca)), s:sg == null ? null : r1(Math.max(0, sg)),
-      unit:(o.unit === 'ml' || /мл|ml|\d\s*л\b/i.test(String(o.qty || '')) || isLiquid(o.name)) ? 'ml' : 'g' };
+    if(!o) return null;
+    const name = String(o.name || '').trim().slice(0, 80);
+    let h = o.per100 === undefined && o.kcal != null ? o : o.per100;             // старый формат — КБЖУ прямо в корне
+    if(h && typeof h === 'object') h._name = name;
+    const per100 = o.found === false ? null : VisionAI.nut100(h);
+    if(!name && !per100) return null;
+    return { name:name, brand:String(o.brand || '').trim().slice(0, 60), qty:String(o.qty || '').slice(0, 30),
+      portion:Math.min(1000, Math.max(0, Math.round(VisionAI.num(o.portion) || 0))) || 100,
+      per100:per100, unit:o.unit === 'ml' ? 'ml' : o.unit === 'g' ? 'g' : '' };
+  },
+  /* КБЖУ по названию, когда таблицу не разглядели: база OpenFoodFacts → поиск в интернете → оценка ИИ */
+  byName: async function(name, brand, status){
+    const q = ((brand && normTxt(name).indexOf(normTxt(brand)) < 0 ? brand + ' ' : '') + name).trim();
+    const qw = normTxt(q).split(' ').filter(function(w){ return w.length > 2 && !/^\d/.test(w); });
+    // 1) открытая база: берём товар, где совпадает большинство слов названия
+    try {
+      status('Ищу «' + esc(q) + '» в базе товаров…');
+      const list = await OFF.search(q);
+      const best = list.map(function(x){
+        const n = normTxt((x.brand || '') + ' ' + x.name);
+        const hit = qw.filter(function(w){ return n.indexOf(w.slice(0, Math.max(4, w.length - 2))) >= 0; }).length;
+        return { x:x, k:qw.length ? hit / qw.length : 0 };
+      }).filter(function(o){ return o.k >= 0.6; }).sort(function(a, b){ return b.k - a.k; })[0];
+      if(best) return Object.assign({}, best.x, { src:'match', matched:best.x.name });
+    } catch(e){}
+    // 2) интернет (модель с веб-поиском)
+    try {
+      const sm = await window.siteAI.searchModels();
+      if(sm.length){
+        status('Ищу пищевую ценность «' + esc(q) + '» в интернете…');
+        const w = await VisionAI.askJson('Найди в интернете пищевую ценность продукта «' + q + '» (сайты магазинов, производителя). Возьми значения с упаковки НА 100 г/мл. ' +
+          'Ответь ТОЛЬКО JSON: {"found":true,"unit":"g","per100":{"kcal":0,"p":0,"f":0,"c":0,"s":null},"source":""}. Не нашёл точный товар — {"found":false}.', sm);
+        const nt = w && w.found !== false ? VisionAI.nut100(w.per100) : null;
+        if(nt) return Object.assign(nt, { src:'web', unit:w.unit === 'ml' ? 'ml' : undefined });
+      }
+    } catch(e){}
+    // 3) оценка ИИ по типичному составу
+    try {
+      status('Оцениваю КБЖУ «' + esc(q) + '» по типичному составу…');
+      const e = await VisionAI.askJson('Продукт: «' + q + '». Если это известный товар — дай значения с его упаковки, иначе типичные для такого продукта. КБЖУ и сахар НА 100 г (для напитков — на 100 мл). ' +
+        'Ответь ТОЛЬКО JSON: {"unit":"g","per100":{"kcal":0,"p":0,"f":0,"c":0,"s":0},"sure":true}. Если это не еда — {"per100":null}.');
+      const nt = e ? VisionAI.nut100(e.per100) : null;
+      if(nt) return Object.assign(nt, { src:'estimate', unit:e.unit === 'ml' ? 'ml' : undefined });
+    } catch(e){}
+    return null;
+  },
+  askJson: async function(prompt, models){
+    const r = await window.siteAI.fetch({ temperature:0, messages:[{ role:'user', content:prompt }] }, { models:models, timeout:45000 });
+    if(!r.ok) return null;
+    const j = await r.json();
+    const m = j.choices && j.choices[0] && j.choices[0].message;
+    try { return VisionAI.parseJson(m && (typeof m.content === 'string' ? m.content : (m.content || []).map(function(x){ return x.text || ''; }).join(''))); } catch(e){ return null; }
   },
   analyze: async function(file){
     const c = this.cfg();
@@ -1694,6 +1785,14 @@ function diaryInit(){
   $('bcFind').onclick = function(){ lookupBarcode($('bcCode').value); };
   $('bcCode').addEventListener('keydown', function(e){ if(e.key === 'Enter') lookupBarcode(this.value); });
   $('bcFile').addEventListener('change', function(){ if(this.files[0]) Scanner.fromImage(this.files[0]); this.value = ''; });
+  // товар без штрих-кода (или код стёрся) — фото упаковки, ИИ читает название и КБЖУ
+  $('bcPackFile').addEventListener('change', function(){
+    const f = Array.prototype.slice.call(this.files || []); this.value = '';
+    if(!f.length) return;
+    if(!VisionAI.ready()){ bcStatus('ИИ сайта не настроен — добавь продукт вручную.', 'warn'); return; }
+    bcPending = null; Scanner.stop(); $('bcNf').style.display = 'none';
+    readLabel(f);
+  });
   // фото + ИИ
   // сфоткал или выбрал из галереи — сразу распознаём, без лишнего нажатия
   const aiPick = function(){ const f = this.files[0] || null; this.value = ''; aiPreview(f); if(f && VisionAI.ready()) aiRun(); };
